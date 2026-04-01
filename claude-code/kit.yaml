@@ -1,0 +1,13 @@
+additional_bindings:
+  - source: ${HOME}/.local/bin
+  - source: ${HOME}/.local/share/claude
+  - source: ${HOME}/.claude
+    mode: rw
+  - source: ${HOME}/.claude.json
+    mode: rw
+
+hooks:
+  - id: run-agent
+    on: executing
+    requires_traits:
+      - agent_prompt

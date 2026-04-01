@@ -1,0 +1,4 @@
+additional_bindings:
+  - source: ${HOME}/.volta
+  - source: ${HOME}/.codex
+    mode: rw

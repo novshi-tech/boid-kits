@@ -1,0 +1,6 @@
+additional_bindings:
+  - source: ${HOME}/.local/share/go
+  - source: ${HOME}/go
+
+env:
+  GOPATH: ${HOME}/go

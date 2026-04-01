@@ -1,0 +1,5 @@
+hooks:
+  - id: run-build
+    on: executing
+    requires_traits:
+      - agent_prompt
