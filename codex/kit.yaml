@@ -2,3 +2,12 @@ additional_bindings:
   - source: ${HOME}/.volta
   - source: ${HOME}/.codex
     mode: rw
+
+hooks:
+  - id: run-agent
+    on: executing
+    requires_traits:
+      - prompt
+    requires:
+      - codex
+      - python3

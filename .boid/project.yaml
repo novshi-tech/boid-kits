@@ -1,0 +1,13 @@
+id: boid-kits
+name: boid-kits
+
+task_behaviors:
+  dev:
+    name: development
+    transition: one-shot
+    traits:
+      - prompt
+
+kits:
+  - github.com/novshi-tech/boid-kits/git
+  - github.com/novshi-tech/boid-kits/codex
