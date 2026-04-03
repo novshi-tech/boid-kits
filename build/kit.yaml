@@ -1,5 +1,0 @@
-hooks:
-  - id: run-build
-    on: executing
-    requires_traits:
-      - prompt

@@ -5,9 +5,16 @@ task_behaviors:
   dev:
     name: development
     transition: one-shot
-    traits:
-      - prompt
+    traits: [ instructions ]
+    default_payload:
+      instructions:
+        main:
+          type: execution
+          consumer: claude-code
+          message: "実装が完了したらコミットしてください."
+
 
 kits:
   - github.com/novshi-tech/boid-kits/git
+  - github.com/novshi-tech/boid-kits/claude-code
   - github.com/novshi-tech/boid-kits/codex
