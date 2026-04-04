@@ -1,17 +1,15 @@
 host_commands:
   # git-cmd: ホスト上の git を worktree パス指定で実行するためのコマンド。
-  # gate sandbox は /tmp で動くが broker はホスト上で実行するため、
-  # "-C <worktree_path>" でワークツリーの FS にアクセスできる。
-  # (git builtin は gate の CWD=/tmp で validateGitBuiltinCwd に弾かれるため
-  #  host_command として別名で定義している)
+  # broker はホスト上で実行するため、"-C <worktree_path>" でワークツリーの
+  # FS にアクセスできる。git builtin は gate の CWD（ProjectDir）外のパスを
+  # validateGitBuiltinCwd が弾くため、host_command として別名で定義している。
   git-cmd:
     path: /usr/bin/git
     allow:
       - "-C * push*"
       - "-C * remote*"
-  # gh: gate は /tmp で動くため GH_REPO の自動検出ができない。
-  # gate スクリプトが git-cmd 経由でリモート URL を取得し、--repo フラグを
-  # 全コマンドに明示指定することで対応する。
+  # gh: GitHub CLI。gate は ProjectDir を CWD として動作するため
+  # .git/config からリポジトリを自動検出できる。
   gh:
     path: /usr/bin/gh
     allow:
@@ -27,10 +25,17 @@ env:
   BOID_WORKTREE_ROOT: "${HOME}/.local/share/boid/worktrees"
 
 gates:
-  - id: pr-verify
+  - id: pr-verify-execution
     on: executing
     traits:
       produces: [verification]
+
+gates:
+  - id: pr-verify-reworking
+    on: reworking
+    traits:
+      produces: [verification]
+
 
 # task_behaviors: このキットを使う際の推奨 behavior 定義の参照例。
 # プロジェクトの .boid/project.yaml でこのキットを使用する場合の設定例:

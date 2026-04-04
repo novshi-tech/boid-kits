@@ -7,12 +7,7 @@
 #   2. GitHub PR の作成（既存 PR がある場合はスキップ）
 #   3. GitHub Actions の完了を待機し、結果を verification として payload に出力
 #
-# 【--repo フラグについて】
-#   gate sandbox は /tmp で動作し git リポジトリが存在しないため、
-#   gh コマンドは --repo フラグなしでリポジトリを自動検出できない。
-#   このスクリプトは git-cmd 経由でリモート URL を取得し、
-#   すべての gh コマンドに --repo "${REPO}" を明示的に渡している。
-#
+
 # 【one-shot-feedback との連携】
 #   verification findings を payload に出力することで、
 #   one-shot-feedback ステートマシンの自己ループ条件を駆動できる:
@@ -54,21 +49,11 @@ if [ -z "$REMOTE_URL" ]; then
     exit 0
 fi
 
-# --- GitHub リポジトリ名を取得 ---
-# gate は /tmp で動くため gh コマンドの自動検出ができない。
-# リモート URL を解析して --repo フラグ用の "owner/repo" スラグを生成する。
-REPO=$(printf '%s' "$REMOTE_URL" | python3 -c "
-import sys, re
-url = sys.stdin.read().strip()
-m = re.search(r'github\.com[:/]([^/]+/[^/?#\s]+?)(?:\.git)?\s*$', url)
-print(m.group(1) if m else '')
-")
-if [ -z "$REPO" ]; then
+# --- GitHub リポジトリ確認 ---
+if ! printf '%s' "$REMOTE_URL" | grep -q 'github\.com'; then
     echo "[pr-verify] not a GitHub remote (${REMOTE_URL}), skipping"
     exit 0
 fi
-
-echo "[pr-verify] repo=${REPO}"
 
 # --- git push ---
 echo "[pr-verify] git push origin ${BRANCH}"
@@ -91,14 +76,12 @@ EOF
 fi
 
 # --- PR の検索または作成 ---
-# すべての gh コマンドに --repo "${REPO}" を明示指定（/tmp では自動検出不可）
-PR_URL=$(gh pr list --repo "${REPO}" --head "${BRANCH}" --json url \
+PR_URL=$(gh pr list --head "${BRANCH}" --json url \
     --jq '.[0].url // ""' 2>/dev/null || true)
 
 if [ -z "$PR_URL" ]; then
     echo "[pr-verify] creating PR for ${BRANCH}"
     PR_URL=$(gh pr create \
-        --repo "${REPO}" \
         --head "${BRANCH}" \
         --title "${TASK_TITLE:-Task ${TASK_SHORT}}" \
         --body "boid task: ${TASK_ID}" \
@@ -113,7 +96,7 @@ fi
 echo "[pr-verify] PR: ${PR_URL}"
 
 # --- GitHub Actions の検索 ---
-RUN_ID=$(gh run list --repo "${REPO}" --branch "${BRANCH}" --limit 1 \
+RUN_ID=$(gh run list --branch "${BRANCH}" --limit 1 \
     --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
 
 if [ -z "$RUN_ID" ]; then
@@ -139,7 +122,7 @@ RUN_STATUS=""
 echo "[pr-verify] waiting for CI run ${RUN_ID} (timeout=${TIMEOUT}×10s)"
 
 for i in $(seq 1 "${TIMEOUT}"); do
-    STATUS=$(gh run view "${RUN_ID}" --repo "${REPO}" \
+    STATUS=$(gh run view "${RUN_ID}" \
         --json status,conclusion \
         --jq '"\(.status)|\(.conclusion // "")"' 2>/dev/null || echo "|")
     RUN_STATUS="${STATUS%%|*}"
@@ -171,7 +154,7 @@ payload_patch:
         status: resolved
 EOF
 else
-    FAILED=$(gh run view "${RUN_ID}" --repo "${REPO}" --json jobs \
+    FAILED=$(gh run view "${RUN_ID}" --json jobs \
         --jq '[.jobs[] | select(.conclusion != null and .conclusion != "success") | .name] | join(", ")' \
         2>/dev/null || echo "unknown")
     cat > "${PATCH_FILE}" <<-EOF
