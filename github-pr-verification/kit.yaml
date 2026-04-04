@@ -25,14 +25,8 @@ env:
   BOID_WORKTREE_ROOT: "${HOME}/.local/share/boid/worktrees"
 
 gates:
-  - id: pr-verify-execution
-    on: executing
-    traits:
-      produces: [verification]
-
-gates:
-  - id: pr-verify-reworking
-    on: reworking
+  - id: pr-verify
+    on: [executing, reworking]
     traits:
       produces: [verification]
 
