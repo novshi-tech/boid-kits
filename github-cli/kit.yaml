@@ -1,0 +1,15 @@
+host_commands:
+  gh:
+    path: /usr/bin/gh
+    allow:
+      - pr
+      - issue
+      - repo
+      - release
+      - run
+      - workflow
+      - label
+      - milestone
+
+    env:
+      GH_TOKEN: "secret:"
