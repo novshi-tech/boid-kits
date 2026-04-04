@@ -23,9 +23,11 @@ set -euo pipefail
 OUTPUT_DIR="/tmp/.boid/output"
 PATCH_FILE="${OUTPUT_DIR}/payload_patch.yaml"
 
-# stdout をすべて stderr（端末）にリダイレクト。
-# payload_patch はファイルに書き込むため stdout は使用しない。
-exec 1>&2
+# NOTE: exec 1>&2 は削除済み。
+# stdout は /tmp/boid-output にキャプチャされ job output に残るため、
+# gate の動作ログが常に可視化される。
+# payload_patch.yaml が存在する場合は EXIT trap がそちらを優先するため
+# verification findings の保存には影響しない。
 
 # --- task 情報取得 ---
 TASK_JSON=$(cat)
@@ -81,11 +83,12 @@ PR_URL=$(gh pr list --head "${BRANCH}" --json url \
 
 if [ -z "$PR_URL" ]; then
     echo "[pr-verify] creating PR for ${BRANCH}"
-    PR_URL=$(gh pr create \
+    GH_OUT=$(gh pr create \
         --head "${BRANCH}" \
         --title "${TASK_TITLE:-Task ${TASK_SHORT}}" \
-        --body "boid task: ${TASK_ID}" \
-        --json url --jq '.url' 2>/dev/null || true)
+        --body "boid task: ${TASK_ID}" 2>/dev/null || true)
+    # gh pr create outputs the PR URL as the last line on success
+    PR_URL=$(echo "${GH_OUT}" | grep -E '^https://' | tail -1 || true)
 fi
 
 if [ -z "$PR_URL" ]; then
