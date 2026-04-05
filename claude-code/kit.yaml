@@ -13,3 +13,4 @@ hooks:
     on: [executing, reworking]
     traits:
       consumes: [instructions]
+      produces: [artifact, tasks]

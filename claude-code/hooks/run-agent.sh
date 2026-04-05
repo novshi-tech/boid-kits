@@ -12,5 +12,5 @@ fi
 if [ "${BOID_INTERACTIVE:-0}" = "1" ]; then
     exec claude --dangerously-skip-permissions "/boid-sandbox"
 else
-    exec claude --dangerously-skip-permissions -p "/boid-sandbox"
+    exec claude --dangerously-skip-permissions --verbose --output-format=stream-json -p "/boid-sandbox"
 fi
