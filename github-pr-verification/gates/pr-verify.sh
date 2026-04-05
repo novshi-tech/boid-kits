@@ -98,12 +98,26 @@ fi
 
 echo "[pr-verify] PR: ${PR_URL}"
 
-# --- GitHub Actions の検索 ---
-RUN_ID=$(gh run list --branch "${BRANCH}" --limit 1 \
-    --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
+# --- GitHub Actions の検索（push 後のトリガー遅延を考慮してリトライ）---
+# push 直後は Actions がまだトリガーされていないことがあるため、
+# BOID_PR_VERIFY_RUN_DETECT_RETRY 回（デフォルト 12 回 × 10 秒 = 2 分）リトライする。
+RUN_DETECT_RETRY="${BOID_PR_VERIFY_RUN_DETECT_RETRY:-12}"
+RUN_ID=""
+
+echo "[pr-verify] waiting for CI run on branch ${BRANCH} (max ${RUN_DETECT_RETRY} attempts)"
+for i in $(seq 1 "${RUN_DETECT_RETRY}"); do
+    RUN_ID=$(gh run list --branch "${BRANCH}" --limit 1 \
+        --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
+    if [ -n "$RUN_ID" ]; then
+        echo "[pr-verify] found CI run ${RUN_ID} (attempt ${i})"
+        break
+    fi
+    echo "[pr-verify] no CI run yet, waiting 10s (attempt ${i}/${RUN_DETECT_RETRY})"
+    sleep 10
+done
 
 if [ -z "$RUN_ID" ]; then
-    echo "[pr-verify] no CI runs found"
+    echo "[pr-verify] no CI runs found after ${RUN_DETECT_RETRY} attempts (no GitHub Actions configured?)"
     cat > "${PATCH_FILE}" <<-EOF
 payload_patch:
   verification:

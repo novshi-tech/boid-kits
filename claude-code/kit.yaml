@@ -10,6 +10,6 @@ additional_bindings:
 
 hooks:
   - id: run-agent
-    on: executing
+    on: [executing, reworking]
     traits:
       consumes: [instructions]
