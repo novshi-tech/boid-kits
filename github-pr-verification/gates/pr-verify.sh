@@ -171,14 +171,57 @@ payload_patch:
         status: resolved
 EOF
 else
-    FAILED=$(gh run view "${RUN_ID}" --json jobs \
-        --jq '[.jobs[] | select(.conclusion != null and .conclusion != "success") | .name] | join(", ")' \
+    # 失敗したジョブ名 + 失敗ステップ名を収集
+    FAILED_JOBS=$(gh run view "${RUN_ID}" --json jobs \
+        --jq '[.jobs[] | select(.conclusion != null and .conclusion != "success") |
+              "\(.name) [steps: \([.steps[] | select(.conclusion != null and .conclusion != "success") | .name] | join(", "))]"
+             ] | join("; ")' \
         2>/dev/null || echo "unknown")
-    cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  verification:
-    findings:
-      - message: "GitHub Actions ${CONCLUSION} on ${PR_URL}: ${FAILED}"
-        status: open
-EOF
+    echo "[pr-verify] failed jobs: ${FAILED_JOBS}"
+
+    # 失敗ステップのログを収集（末尾100行）
+    FAILED_LOG_FILE=$(mktemp /tmp/boid-pr-verify-log.XXXXXX)
+    gh run view "${RUN_ID}" --log-failed 2>/dev/null | tail -n 100 > "${FAILED_LOG_FILE}" || true
+    echo "[pr-verify] collected $(wc -l < "${FAILED_LOG_FILE}") log lines"
+
+    # Python で YAML を安全に生成（multiline メッセージのエスケープ対策）
+    export FAILED_JOBS PR_URL CONCLUSION FAILED_LOG_FILE
+    python3 - <<'PYEOF' > "${PATCH_FILE}"
+import os
+
+failed_jobs = os.environ.get('FAILED_JOBS', 'unknown')
+pr_url = os.environ.get('PR_URL', '')
+conclusion = os.environ.get('CONCLUSION', '')
+log_file = os.environ.get('FAILED_LOG_FILE', '')
+
+failed_log = ''
+if log_file and os.path.exists(log_file):
+    with open(log_file) as f:
+        failed_log = f.read().strip()
+
+parts = [
+    f"GitHub Actions {conclusion} on {pr_url}",
+    f"Failed: {failed_jobs}",
+]
+if failed_log:
+    parts += ["", "Log (last 100 lines):", failed_log]
+
+message = "\n".join(parts)
+
+try:
+    import yaml
+    data = {
+        'payload_patch': {
+            'verification': {
+                'findings': [{'message': message, 'status': 'open'}]
+            }
+        }
+    }
+    print(yaml.dump(data, default_flow_style=False, allow_unicode=True))
+except ImportError:
+    # PyYAML がない場合: 改行を \n にエスケープして quoted string として出力
+    escaped = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+    print(f'payload_patch:\n  verification:\n    findings:\n      - message: "{escaped}"\n        status: open')
+PYEOF
+    rm -f "${FAILED_LOG_FILE}"
 fi
