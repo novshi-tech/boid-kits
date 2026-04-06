@@ -1,0 +1,5 @@
+gates:
+  - id: done
+    on: [done]
+    traits:
+      consumes: [tasks]
