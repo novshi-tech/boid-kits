@@ -9,8 +9,13 @@ if [ ! -e "$SKILLS_LINK" ] && [ ! -L "$SKILLS_LINK" ]; then
     ln -s "$SKILLS_SRC" "$SKILLS_LINK"
 fi
 
+MODEL_FLAG=""
+if [ -n "${BOID_MODEL:-}" ]; then
+    MODEL_FLAG="--model ${BOID_MODEL}"
+fi
+
 if [ "${BOID_INTERACTIVE:-0}" = "1" ]; then
-    exec claude --dangerously-skip-permissions "/boid-sandbox"
+    exec claude --dangerously-skip-permissions $MODEL_FLAG "/boid-sandbox"
 else
-    exec claude --dangerously-skip-permissions --verbose --output-format=stream-json --include-partial-messages -p "/boid-sandbox"
+    exec claude --dangerously-skip-permissions --verbose --output-format=stream-json --include-partial-messages $MODEL_FLAG -p "/boid-sandbox"
 fi
