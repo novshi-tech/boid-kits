@@ -57,6 +57,13 @@ if ! printf '%s' "$REMOTE_URL" | grep -q 'github\.com'; then
     exit 0
 fi
 
+# --- push 前に既存の最新 CI run ID を記録 ---
+# rework サイクルで前サイクルの stale run を拾わないために、
+# push 前の最新 run ID を記録しておく。
+PREV_RUN_ID=$(gh run list --branch "${BRANCH}" --limit 1 \
+    --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
+echo "[pr-verify] previous run ID: ${PREV_RUN_ID:-none}"
+
 # --- git push ---
 echo "[pr-verify] git push origin ${BRANCH}"
 PUSH_EXIT=0
@@ -75,8 +82,37 @@ payload_patch:
       - message: "Uncommitted changes detected in worktree. Commit and push your changes before CI can verify them."
         status: open
 EOF
+    elif [ -n "$PREV_RUN_ID" ]; then
+        # 新しいコミットはないが、前回の CI run がある場合はその結果を確認する
+        echo "[pr-verify] checking previous CI run ${PREV_RUN_ID}"
+        PREV_STATUS=$(gh run view "${PREV_RUN_ID}" \
+            --json status,conclusion \
+            --jq '"\(.status)|\(.conclusion // "")"' 2>/dev/null || echo "|")
+        PREV_RUN_STATUS="${PREV_STATUS%%|*}"
+        PREV_CONCLUSION="${PREV_STATUS#*|}"
+        if [ "$PREV_RUN_STATUS" = "completed" ] && [ "$PREV_CONCLUSION" = "success" ]; then
+            echo "[pr-verify] previous CI run passed, no new commits needed"
+            PR_URL=$(gh pr list --head "${BRANCH}" --json url \
+                --jq '.[0].url // ""' 2>/dev/null || true)
+            cat > "${PATCH_FILE}" <<-EOF
+payload_patch:
+  verification:
+    findings:
+      - message: "GitHub Actions passed (${PR_URL:-no PR})"
+        status: resolved
+EOF
+        else
+            echo "[pr-verify] previous CI run not successful (status=${PREV_RUN_STATUS}, conclusion=${PREV_CONCLUSION})"
+            cat > "${PATCH_FILE}" <<-EOF
+payload_patch:
+  verification:
+    findings:
+      - message: "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes."
+        status: open
+EOF
+        fi
     else
-        echo "[pr-verify] no new commits and no uncommitted changes"
+        echo "[pr-verify] no new commits and no previous CI run"
         cat > "${PATCH_FILE}" <<-EOF
 payload_patch:
   verification:
@@ -127,18 +163,20 @@ echo "[pr-verify] PR: ${PR_URL}"
 # --- GitHub Actions の検索（push 後のトリガー遅延を考慮してリトライ）---
 # push 直後は Actions がまだトリガーされていないことがあるため、
 # BOID_PR_VERIFY_RUN_DETECT_RETRY 回（デフォルト 12 回 × 10 秒 = 2 分）リトライする。
+# PREV_RUN_ID と異なる run のみを対象にすることで、前サイクルの stale run を回避する。
 RUN_DETECT_RETRY="${BOID_PR_VERIFY_RUN_DETECT_RETRY:-12}"
 RUN_ID=""
 
-echo "[pr-verify] waiting for CI run on branch ${BRANCH} (max ${RUN_DETECT_RETRY} attempts)"
+echo "[pr-verify] waiting for new CI run on branch ${BRANCH} (prev=${PREV_RUN_ID:-none}, max ${RUN_DETECT_RETRY} attempts)"
 for i in $(seq 1 "${RUN_DETECT_RETRY}"); do
-    RUN_ID=$(gh run list --branch "${BRANCH}" --limit 1 \
+    CANDIDATE=$(gh run list --branch "${BRANCH}" --limit 1 \
         --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
-    if [ -n "$RUN_ID" ]; then
-        echo "[pr-verify] found CI run ${RUN_ID} (attempt ${i})"
+    if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "$PREV_RUN_ID" ]; then
+        RUN_ID="$CANDIDATE"
+        echo "[pr-verify] found new CI run ${RUN_ID} (attempt ${i})"
         break
     fi
-    echo "[pr-verify] no CI run yet, waiting 10s (attempt ${i}/${RUN_DETECT_RETRY})"
+    echo "[pr-verify] no new CI run yet (candidate=${CANDIDATE:-none}), waiting 10s (attempt ${i}/${RUN_DETECT_RETRY})"
     sleep 10
 done
 
