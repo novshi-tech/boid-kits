@@ -59,23 +59,49 @@ fi
 
 # --- git push ---
 echo "[pr-verify] git push origin ${BRANCH}"
-PUSH_OUT=$(git-cmd -C "${WORKTREE_PATH}" push origin "${BRANCH}" 2>&1 || true)
-PUSH_STATUS=$?
-if [ "${PUSH_STATUS}" -ne 0 ]; then
-    if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing to push'; then
-        echo "[pr-verify] branch already up-to-date on remote"
-    else
-        echo "[pr-verify] git push failed (exit=${PUSH_STATUS}): ${PUSH_OUT}"
+PUSH_EXIT=0
+PUSH_OUT=$(git-cmd -C "${WORKTREE_PATH}" push origin "${BRANCH}" 2>&1) || PUSH_EXIT=$?
+
+# push が up-to-date の場合: 新しいコミットが push されていない
+if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing to push'; then
+    echo "[pr-verify] branch already up-to-date on remote"
+    DIRTY=$(git-cmd -C "${WORKTREE_PATH}" status --porcelain 2>/dev/null || true)
+    if [ -n "$DIRTY" ]; then
+        echo "[pr-verify] uncommitted changes detected in worktree"
         cat > "${PATCH_FILE}" <<-EOF
 payload_patch:
   verification:
     findings:
-      - message: "git push failed for branch ${BRANCH}"
+      - message: "Uncommitted changes detected in worktree. Commit and push your changes before CI can verify them."
         status: open
 EOF
-        exit 0
+    else
+        echo "[pr-verify] no new commits and no uncommitted changes"
+        cat > "${PATCH_FILE}" <<-EOF
+payload_patch:
+  verification:
+    findings:
+      - message: "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes."
+        status: open
+EOF
     fi
+    exit 0
 fi
+
+# push が失敗した場合（up-to-date 以外の失敗）
+if [ "${PUSH_EXIT}" -ne 0 ]; then
+    echo "[pr-verify] git push failed (exit=${PUSH_EXIT}): ${PUSH_OUT}"
+    cat > "${PATCH_FILE}" <<-EOF
+payload_patch:
+  verification:
+    findings:
+      - message: "git push failed for branch ${BRANCH}: ${PUSH_OUT}"
+        status: open
+EOF
+    exit 0
+fi
+
+echo "[pr-verify] push successful"
 
 # --- PR の検索または作成 ---
 PR_URL=$(gh pr list --head "${BRANCH}" --json url \

@@ -8,6 +8,7 @@ host_commands:
     allow:
       - "-C * push*"
       - "-C * remote*"
+      - "-C * status*"
   # gh: GitHub CLI。gate は ProjectDir を CWD として動作するため
   # .git/config からリポジトリを自動検出できる。
   gh:
