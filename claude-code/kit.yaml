@@ -12,5 +12,5 @@ hooks:
   - id: run-agent
     on: [executing, reworking]
     traits:
-      consumes: [instructions]
+      consumes: [instructions, "verification?"]
       produces: [artifact, tasks]
