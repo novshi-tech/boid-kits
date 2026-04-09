@@ -13,6 +13,28 @@ import subprocess
 import sys
 
 
+def resolve_depends_on(depends_on, created_ids):
+    """depends_on 配列内の #N インデックス参照を実タスク ID に解決する。"""
+    resolved = []
+    for dep in depends_on:
+        if isinstance(dep, str) and dep.startswith("#"):
+            try:
+                idx = int(dep[1:])
+            except ValueError:
+                print(f"warning: invalid depends_on ref: {dep}", file=sys.stderr)
+                continue
+            if idx < 0 or idx >= len(created_ids):
+                print(
+                    f"warning: depends_on ref {dep} out of range (created: {len(created_ids)})",
+                    file=sys.stderr,
+                )
+                continue
+            resolved.append(created_ids[idx])
+        else:
+            resolved.append(dep)
+    return resolved
+
+
 def main():
     data = json.load(sys.stdin)
     payload = data.get("payload") or {}
@@ -22,6 +44,7 @@ def main():
         return
 
     project_id = data.get("project_id", "")
+    created_ids = []
 
     for task in tasks:
         title = task.get("title", "")
@@ -31,6 +54,7 @@ def main():
                 f"warning: skipping task missing title/behavior: {task}",
                 file=sys.stderr,
             )
+            created_ids.append("")
             continue
 
         spec = {"title": title, "behavior": behavior}
@@ -42,6 +66,12 @@ def main():
             spec["project_id"] = project_id
         if task.get("payload"):
             spec["payload"] = task["payload"]
+        if task.get("depends_on"):
+            spec["depends_on"] = resolve_depends_on(task["depends_on"], created_ids)
+        if task.get("depends_on_payload"):
+            spec["depends_on_payload"] = task["depends_on_payload"]
+        if task.get("auto_start"):
+            spec["auto_start"] = task["auto_start"]
 
         result = subprocess.run(
             ["boid", "task", "create"],
@@ -54,7 +84,13 @@ def main():
                 file=sys.stderr,
             )
             sys.exit(1)
-        sys.stderr.write(result.stdout.decode())
+        stdout = result.stdout.decode()
+        sys.stderr.write(stdout)
+        try:
+            created = json.loads(stdout.strip())
+            created_ids.append(created.get("id", ""))
+        except (json.JSONDecodeError, ValueError):
+            created_ids.append("")
 
 
 if __name__ == "__main__":
