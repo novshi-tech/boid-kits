@@ -8,19 +8,11 @@ stdout: payload_patch (空 = 変更なし)
 payload.tasks の各要素を boid task create に渡す。
 必須フィールド: title, behavior
 
-depends_on の ref 解決:
-  各タスクに ref (任意の名前) を付与し、depends_on で ref 名を指定できる。
-  UUID 形式の値はそのまま渡し、それ以外は同一バッチ内の ref として解決する。
+depends_on は ref 名をそのまま渡す（サーバー側で ref + parent_id により解決される）。
 """
 import json
-import re
 import subprocess
 import sys
-import uuid
-
-UUID_PATTERN = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
 
 
 def main():
@@ -34,18 +26,7 @@ def main():
     project_id = data.get("project_id", "")
     parent_id = data.get("id", "")
 
-    # --- 1st pass: ID 事前割り当て & ref → ID マッピング構築 ---
-    task_ids = []
-    ref_to_id = {}
     for task in tasks:
-        task_id = str(uuid.uuid4())
-        task_ids.append(task_id)
-        ref = task.get("ref", "")
-        if ref:
-            ref_to_id[ref] = task_id
-
-    # --- 2nd pass: タスク作成 ---
-    for i, task in enumerate(tasks):
         title = task.get("title", "")
         behavior = task.get("behavior", "")
         if not title or not behavior:
@@ -55,7 +36,7 @@ def main():
             )
             continue
 
-        spec = {"id": task_ids[i], "title": title, "behavior": behavior, "parent_id": parent_id}
+        spec = {"title": title, "behavior": behavior, "parent_id": parent_id}
         if task.get("ref"):
             spec["ref"] = task["ref"]
         if task.get("description"):
@@ -67,18 +48,7 @@ def main():
         if task.get("payload"):
             spec["payload"] = task["payload"]
         if task.get("depends_on"):
-            resolved = []
-            for dep in task["depends_on"]:
-                if UUID_PATTERN.match(dep):
-                    resolved.append(dep)
-                elif dep in ref_to_id:
-                    resolved.append(ref_to_id[dep])
-                else:
-                    print(
-                        f"warning: depends_on ref {dep!r} not found in batch (task {title!r})",
-                        file=sys.stderr,
-                    )
-            spec["depends_on"] = resolved
+            spec["depends_on"] = task["depends_on"]
         if task.get("depends_on_payload"):
             spec["depends_on_payload"] = task["depends_on_payload"]
         if task.get("auto_start"):
