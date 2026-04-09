@@ -32,6 +32,7 @@ def main():
         return
 
     project_id = data.get("project_id", "")
+    parent_id = data.get("id", "")
 
     # --- 1st pass: ID 事前割り当て & ref → ID マッピング構築 ---
     task_ids = []
@@ -54,7 +55,7 @@ def main():
             )
             continue
 
-        spec = {"id": task_ids[i], "title": title, "behavior": behavior}
+        spec = {"id": task_ids[i], "title": title, "behavior": behavior, "parent_id": parent_id}
         if task.get("ref"):
             spec["ref"] = task["ref"]
         if task.get("description"):
