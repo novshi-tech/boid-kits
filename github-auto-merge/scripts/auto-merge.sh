@@ -10,18 +10,22 @@
 
 set -euo pipefail
 
-OUTPUT_DIR="${HOME}/.boid/output"
-PATCH_FILE="${OUTPUT_DIR}/payload_patch.yaml"
 CONTEXT_PAYLOAD="${HOME}/.boid/context/payload.yaml"
-
-mkdir -p "${OUTPUT_DIR}"
 
 echo "[auto-merge] starting"
 
-# --- 1. トリガー情報の取得 ---
-TASK_ID=""
-PROJECT_ID=""
+# --- helper: boid task update でペイロードを更新 ---
+update_task_payload() {
+    local task_id="$1"
+    local payload_json="$2"
+    local tmpfile
+    tmpfile=$(mktemp /tmp/boid-auto-merge-payload.XXXXXX)
+    printf '%s' "${payload_json}" > "${tmpfile}"
+    boid task update "${task_id}" --payload-file "${tmpfile}" 2>&1 || echo "[auto-merge] WARNING: boid task update failed" >&2
+    rm -f "${tmpfile}"
+}
 
+# --- 1. トリガー情報の取得 ---
 TASK_ID=$(python3 -c "
 import yaml, sys
 with open(sys.argv[1]) as f:
@@ -38,17 +42,6 @@ print(data.get('_trigger', {}).get('project_id', '') or '')
 
 if [ -z "${TASK_ID}" ]; then
     echo "[auto-merge] ERROR: could not determine TASK_ID from payload"
-    cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  artifact:
-    merged_pr:
-      number: null
-      url: null
-      branch: null
-      status: "error"
-      error: "could not determine TASK_ID from payload"
-    conflicts: []
-EOF
     exit 0
 fi
 
@@ -63,17 +56,15 @@ PR_INFO=$(gh pr list --head "${BRANCH}" --state all \
 
 if [ -z "${PR_INFO}" ] || [ "${PR_INFO}" = "null" ]; then
     echo "[auto-merge] no PR found for branch ${BRANCH}"
-    cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  artifact:
-    merged_pr:
-      number: null
-      url: null
-      branch: "${BRANCH}"
-      status: "no_pr"
-      error: null
-    conflicts: []
-EOF
+    update_task_payload "${TASK_ID}" "$(python3 -c "
+import json
+print(json.dumps({
+    'artifact': {
+        'pr': {'number': None, 'url': None, 'branch': '${BRANCH}', 'merged': False, 'error': None},
+        'conflicts': [],
+    },
+}))
+")"
     exit 0
 fi
 
@@ -86,14 +77,11 @@ echo "[auto-merge] PR #${PR_NUMBER} (${PR_URL}) state=${PR_STATE}"
 MERGE_STATUS=""
 MERGE_ERROR=""
 
-# --- PR が既にマージ済みの場合 ---
+# --- 3. PR マージ ---
 if [ "${PR_STATE}" = "MERGED" ]; then
     echo "[auto-merge] PR already merged, proceeding to conflict check"
     MERGE_STATUS="already_merged"
-fi
-
-# --- 3. PR マージ ---
-if [ -z "${MERGE_STATUS}" ]; then
+else
     MERGE_STDERR_FILE=$(mktemp /tmp/boid-auto-merge-err.XXXXXX)
     MERGE_EXIT=0
 
@@ -105,35 +93,32 @@ if [ -z "${MERGE_STATUS}" ]; then
         echo "[auto-merge] PR merged successfully"
         MERGE_STATUS="merged"
     else
-        echo "[auto-merge] merge failed (exit=${MERGE_EXIT}): ${MERGE_STDERR}"
+        echo "[auto-merge] ERROR: merge failed (exit=${MERGE_EXIT}): ${MERGE_STDERR}"
         MERGE_STATUS="merge_failed"
         MERGE_ERROR="${MERGE_STDERR}"
 
         # マージ失敗の場合はコンフリクトチェックをスキップ（main は変更されていないため）
         export PR_NUMBER PR_URL BRANCH MERGE_STATUS MERGE_ERROR
-        python3 - <<'PYEOF' > "${PATCH_FILE}"
-import os, yaml
+        update_task_payload "${TASK_ID}" "$(python3 - <<'PYEOF'
+import os, json
 
-pr_number_str = os.environ.get('PR_NUMBER', '')
-pr_number = int(pr_number_str) if pr_number_str else None
+pr_number = int(os.environ.get('PR_NUMBER', '0'))
 merge_error = os.environ.get('MERGE_ERROR', '') or None
 
-data = {
-    'payload_patch': {
-        'artifact': {
-            'merged_pr': {
-                'number': pr_number,
-                'url': os.environ.get('PR_URL', ''),
-                'branch': os.environ.get('BRANCH', ''),
-                'status': os.environ.get('MERGE_STATUS', ''),
-                'error': merge_error,
-            },
-            'conflicts': []
-        }
-    }
-}
-print(yaml.dump(data, default_flow_style=False, allow_unicode=True))
+print(json.dumps({
+    'artifact': {
+        'pr': {
+            'number': pr_number,
+            'url': os.environ.get('PR_URL', ''),
+            'branch': os.environ.get('BRANCH', ''),
+            'merged': False,
+            'error': merge_error,
+        },
+        'conflicts': [],
+    },
+}))
 PYEOF
+)"
         exit 0
     fi
 fi
@@ -163,7 +148,6 @@ print(sum(1 for p in prs if p.get('mergeable') == 'UNKNOWN'))
 
     echo "[auto-merge] ${UNKNOWN_COUNT} PR(s) still UNKNOWN, triggering recalculation (attempt ${i}/${MAX_RETRIES})"
 
-    # 各 UNKNOWN PR に対して個別リクエスト（再計算トリガー）
     while IFS= read -r num; do
         [ -z "${num}" ] && continue
         gh pr view "${num}" --json mergeable >/dev/null 2>&1 || true
@@ -198,6 +182,7 @@ CONFLICTS_FILE=$(mktemp /tmp/boid-auto-merge-conflicts.XXXXXX)
 echo "[]" > "${CONFLICTS_FILE}"
 
 if [ "${CONFLICT_COUNT}" -gt 0 ]; then
+    # 並行 rebase の連鎖を防ぐため、タスクは1つだけ作成
     export PROJECT_ID CONFLICT_PRS_JSON
     python3 - <<'PYEOF' > "${CONFLICTS_FILE}"
 import os, json, subprocess, sys
@@ -213,7 +198,6 @@ for i, pr in enumerate(conflict_prs):
     head_branch = pr['headRefName']
 
     task_id = ''
-    # 並行 rebase の連鎖を防ぐため、タスクは1つだけ作成
     if i == 0:
         task_body = {
             "project_id": project_id,
@@ -242,10 +226,11 @@ for i, pr in enumerate(conflict_prs):
             if proc.returncode == 0 and proc.stdout.strip():
                 created = json.loads(proc.stdout.strip())
                 task_id = created.get('id', '')
+                print(f"[auto-merge] created resolution task {task_id} for PR #{pr_number}", file=sys.stderr)
             else:
-                print(f"[auto-merge] boid task create failed for PR #{pr_number}: {proc.stderr}", file=sys.stderr)
+                print(f"[auto-merge] ERROR: boid task create failed for PR #{pr_number}: {proc.stderr}", file=sys.stderr)
         except Exception as e:
-            print(f"[auto-merge] exception creating task for PR #{pr_number}: {e}", file=sys.stderr)
+            print(f"[auto-merge] ERROR: exception creating task for PR #{pr_number}: {e}", file=sys.stderr)
 
     results.append({
         'pr_number': pr_number,
@@ -261,39 +246,35 @@ fi
 
 # --- 6. artifact 出力 ---
 export PR_NUMBER PR_URL BRANCH MERGE_STATUS MERGE_ERROR
-python3 - "${CONFLICTS_FILE}" <<'PYEOF' > "${PATCH_FILE}"
-import os, json, sys, yaml
+update_task_payload "${TASK_ID}" "$(python3 - "${CONFLICTS_FILE}" <<'PYEOF'
+import os, json, sys
 
 conflicts_file = sys.argv[1]
 with open(conflicts_file) as f:
     conflicts = json.load(f)
 
-pr_number_str = os.environ.get('PR_NUMBER', '')
-pr_number = int(pr_number_str) if pr_number_str else None
+pr_number = int(os.environ.get('PR_NUMBER', '0'))
 pr_url = os.environ.get('PR_URL', '')
 branch = os.environ.get('BRANCH', '')
 merge_status = os.environ.get('MERGE_STATUS', '')
 merge_error_str = os.environ.get('MERGE_ERROR', '')
 merge_error = merge_error_str if merge_error_str else None
 
-data = {
-    'payload_patch': {
-        'artifact': {
-            'merged_pr': {
-                'number': pr_number,
-                'url': pr_url,
-                'branch': branch,
-                'status': merge_status,
-                'error': merge_error,
-            },
-            'conflicts': conflicts,
-        }
-    }
-}
-
-print(yaml.dump(data, default_flow_style=False, allow_unicode=True))
+print(json.dumps({
+    'artifact': {
+        'pr': {
+            'number': pr_number,
+            'url': pr_url,
+            'branch': branch,
+            'merged': merge_status in ('merged', 'already_merged'),
+            'error': merge_error,
+        },
+        'conflicts': conflicts,
+    },
+}))
 PYEOF
+)"
 
 rm -f "${CONFLICTS_FILE}"
 
-echo "[auto-merge] done. artifact written to ${PATCH_FILE}"
+echo "[auto-merge] done"
