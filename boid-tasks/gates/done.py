@@ -7,32 +7,20 @@ stdout: payload_patch (空 = 変更なし)
 
 payload.tasks の各要素を boid task create に渡す。
 必須フィールド: title, behavior
+
+depends_on の ref 解決:
+  各タスクに ref (任意の名前) を付与し、depends_on で ref 名を指定できる。
+  UUID 形式の値はそのまま渡し、それ以外は同一バッチ内の ref として解決する。
 """
 import json
+import re
 import subprocess
 import sys
+import uuid
 
-
-def resolve_depends_on(depends_on, created_ids):
-    """depends_on 配列内の #N インデックス参照を実タスク ID に解決する。"""
-    resolved = []
-    for dep in depends_on:
-        if isinstance(dep, str) and dep.startswith("#"):
-            try:
-                idx = int(dep[1:])
-            except ValueError:
-                print(f"warning: invalid depends_on ref: {dep}", file=sys.stderr)
-                continue
-            if idx < 0 or idx >= len(created_ids):
-                print(
-                    f"warning: depends_on ref {dep} out of range (created: {len(created_ids)})",
-                    file=sys.stderr,
-                )
-                continue
-            resolved.append(created_ids[idx])
-        else:
-            resolved.append(dep)
-    return resolved
+UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 
 
 def main():
@@ -44,9 +32,19 @@ def main():
         return
 
     project_id = data.get("project_id", "")
-    created_ids = []
 
+    # --- 1st pass: ID 事前割り当て & ref → ID マッピング構築 ---
+    task_ids = []
+    ref_to_id = {}
     for task in tasks:
+        task_id = str(uuid.uuid4())
+        task_ids.append(task_id)
+        ref = task.get("ref", "")
+        if ref:
+            ref_to_id[ref] = task_id
+
+    # --- 2nd pass: タスク作成 ---
+    for i, task in enumerate(tasks):
         title = task.get("title", "")
         behavior = task.get("behavior", "")
         if not title or not behavior:
@@ -54,10 +52,11 @@ def main():
                 f"warning: skipping task missing title/behavior: {task}",
                 file=sys.stderr,
             )
-            created_ids.append("")
             continue
 
-        spec = {"title": title, "behavior": behavior}
+        spec = {"id": task_ids[i], "title": title, "behavior": behavior}
+        if task.get("ref"):
+            spec["ref"] = task["ref"]
         if task.get("description"):
             spec["description"] = task["description"]
         if task.get("project_id"):
@@ -67,7 +66,18 @@ def main():
         if task.get("payload"):
             spec["payload"] = task["payload"]
         if task.get("depends_on"):
-            spec["depends_on"] = resolve_depends_on(task["depends_on"], created_ids)
+            resolved = []
+            for dep in task["depends_on"]:
+                if UUID_PATTERN.match(dep):
+                    resolved.append(dep)
+                elif dep in ref_to_id:
+                    resolved.append(ref_to_id[dep])
+                else:
+                    print(
+                        f"warning: depends_on ref {dep!r} not found in batch (task {title!r})",
+                        file=sys.stderr,
+                    )
+            spec["depends_on"] = resolved
         if task.get("depends_on_payload"):
             spec["depends_on_payload"] = task["depends_on_payload"]
         if task.get("auto_start"):
@@ -84,13 +94,7 @@ def main():
                 file=sys.stderr,
             )
             sys.exit(1)
-        stdout = result.stdout.decode()
-        sys.stderr.write(stdout)
-        try:
-            created = json.loads(stdout.strip())
-            created_ids.append(created.get("id", ""))
-        except (json.JSONDecodeError, ValueError):
-            created_ids.append("")
+        sys.stderr.write(result.stdout.decode())
 
 
 if __name__ == "__main__":
