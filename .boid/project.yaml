@@ -11,7 +11,7 @@ task_behaviors:
         main:
           type: execution
           consumer: claude-code
-          message: "実装が完了したらコミットしてください."
+          message: "タスクを実装してください。完了したらコミットしてください."
 
 
 kits:
