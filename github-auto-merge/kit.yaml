@@ -1,0 +1,21 @@
+builtin_commands:
+  - boid
+
+host_commands:
+  gh:
+    path: /usr/bin/gh
+    allow:
+      - "pr *"
+    env:
+      GH_TOKEN: "secret:"
+
+env:
+  BOID_MERGE_POLL_RETRIES: "6"
+  BOID_MERGE_POLL_INTERVAL: "10"
+
+scripts:
+  - id: auto-merge
+    description: "完了タスクのPRを自動マージし、コンフリクトを検出したら解消タスクを登録"
+    on: [task_done]
+    filter:
+      behavior: dev
