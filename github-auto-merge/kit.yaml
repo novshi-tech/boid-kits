@@ -7,7 +7,10 @@ env:
 
 scripts:
   - id: auto-merge
-    description: "完了タスクのPRを自動マージし、コンフリクトを検出したら解消タスクを登録"
+    description: "完了タスクの PR を自動マージする"
     on: [task_done]
     filter:
       behavior: dev
+  - id: detect-conflicts
+    description: "open PR を走査し、コンフリクトのある PR に解消タスクを登録する"
+    on: []
