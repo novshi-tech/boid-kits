@@ -42,14 +42,33 @@ WORKTREE_PATH="${WORKTREE_ROOT}/${PROJECT_ID}/${TASK_SHORT}"
 
 echo "[pr-verify] task=${TASK_SHORT} branch=${BRANCH}"
 
+# --- diagnostic 蓄積（findings に含めるためのバッファ）---
+# 各分岐で観測した状態を DIAG に追記し、最終的に findings の message に含める。
+DIAG=""
+diag() {
+    DIAG+="${1}"$'\n'
+}
+diag "task_short=${TASK_SHORT}"
+diag "branch=${BRANCH}"
+diag "worktree_path=${WORKTREE_PATH}"
+
 # --- worktree 検出 ---
 # git-cmd は broker 経由でホスト上の /usr/bin/git を実行する。
 # broker はホスト上で動くため WORKTREE_PATH の FS にアクセスできる。
 REMOTE_URL=$(git-cmd -C "${WORKTREE_PATH}" remote get-url origin 2>/dev/null || true)
+diag "remote_url=${REMOTE_URL:-empty}"
 if [ -z "$REMOTE_URL" ]; then
     echo "[pr-verify] worktree not found at ${WORKTREE_PATH}, skipping"
     exit 0
 fi
+
+# --- worktree HEAD と origin の状態を記録 ---
+LOCAL_HEAD=$(git-cmd -C "${WORKTREE_PATH}" rev-parse HEAD 2>/dev/null || echo "?")
+ORIGIN_HEAD=$(git-cmd -C "${WORKTREE_PATH}" rev-parse "origin/${BRANCH}" 2>/dev/null || echo "?")
+diag "local_head=${LOCAL_HEAD}"
+diag "origin_head=${ORIGIN_HEAD}"
+COMMITS_AHEAD=$(git-cmd -C "${WORKTREE_PATH}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")
+diag "commits_ahead=${COMMITS_AHEAD}"
 
 # --- GitHub リポジトリ確認 ---
 if ! printf '%s' "$REMOTE_URL" | grep -q 'github\.com'; then
@@ -63,25 +82,40 @@ fi
 PREV_RUN_ID=$(gh run list --branch "${BRANCH}" --limit 1 \
     --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
 echo "[pr-verify] previous run ID: ${PREV_RUN_ID:-none}"
+diag "prev_run_id=${PREV_RUN_ID:-none}"
 
 # --- git push ---
 echo "[pr-verify] git push origin ${BRANCH}"
 PUSH_EXIT=0
 PUSH_OUT=$(git-cmd -C "${WORKTREE_PATH}" push origin "${BRANCH}" 2>&1) || PUSH_EXIT=$?
+diag "push_exit=${PUSH_EXIT}"
+diag "push_out_first10=$(printf '%s' "$PUSH_OUT" | head -10 | tr '\n' '|')"
+
+# emit_findings: diag を含めて findings を出力するヘルパー
+emit_findings() {
+    local msg="$1"
+    local status="$2"
+    {
+        printf 'payload_patch:\n'
+        printf '  verification:\n'
+        printf '    findings:\n'
+        printf '      - status: %s\n' "$status"
+        printf '        message: |\n'
+        printf '          %s\n' "$msg"
+        printf '          DIAGNOSTIC:\n'
+        printf '%s' "$DIAG" | sed 's/^/            /'
+    } > "${PATCH_FILE}"
+}
 
 # push が up-to-date の場合: 新しいコミットが push されていない
 if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing to push'; then
     echo "[pr-verify] branch already up-to-date on remote"
+    diag "branch=up_to_date"
     DIRTY=$(git-cmd -C "${WORKTREE_PATH}" status --porcelain 2>/dev/null || true)
+    diag "dirty=$(printf '%s' "$DIRTY" | wc -l)_lines"
     if [ -n "$DIRTY" ]; then
         echo "[pr-verify] uncommitted changes detected in worktree"
-        cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  verification:
-    findings:
-      - message: "Uncommitted changes detected in worktree. Commit and push your changes before CI can verify them."
-        status: open
-EOF
+        emit_findings "Uncommitted changes detected in worktree. Commit and push your changes before CI can verify them." "open"
     elif [ -n "$PREV_RUN_ID" ]; then
         # 新しいコミットはないが、前回の CI run がある場合はその結果を確認する
         echo "[pr-verify] checking previous CI run ${PREV_RUN_ID}"
@@ -90,36 +124,20 @@ EOF
             --jq '"\(.status)|\(.conclusion // "")"' 2>/dev/null || echo "|")
         PREV_RUN_STATUS="${PREV_STATUS%%|*}"
         PREV_CONCLUSION="${PREV_STATUS#*|}"
+        diag "prev_run_status=${PREV_RUN_STATUS}"
+        diag "prev_conclusion=${PREV_CONCLUSION}"
         if [ "$PREV_RUN_STATUS" = "completed" ] && [ "$PREV_CONCLUSION" = "success" ]; then
             echo "[pr-verify] previous CI run passed, no new commits needed"
             PR_URL=$(gh pr list --head "${BRANCH}" --json url \
                 --jq '.[0].url // ""' 2>/dev/null || true)
-            cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  verification:
-    findings:
-      - message: "GitHub Actions passed (${PR_URL:-no PR})"
-        status: resolved
-EOF
+            emit_findings "GitHub Actions passed (${PR_URL:-no PR})" "resolved"
         else
             echo "[pr-verify] previous CI run not successful (status=${PREV_RUN_STATUS}, conclusion=${PREV_CONCLUSION})"
-            cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  verification:
-    findings:
-      - message: "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes."
-        status: open
-EOF
+            emit_findings "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes." "open"
         fi
     else
         echo "[pr-verify] no new commits and no previous CI run"
-        cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  verification:
-    findings:
-      - message: "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes."
-        status: open
-EOF
+        emit_findings "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes." "open"
     fi
     exit 0
 fi
