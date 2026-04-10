@@ -4,15 +4,18 @@
 # task_done イベントで発火する。
 # 完了タスクの PR を自動マージし、コンフリクトのあるオープン PR に対して解消タスクを登録する。
 #
+# gate として実行される。タスク JSON は stdin から受け取る。
+#
 # 環境変数:
 #   BOID_MERGE_POLL_RETRIES  mergeable ポーリングの最大リトライ回数（デフォルト 6）
 #   BOID_MERGE_POLL_INTERVAL  ポーリング間隔（秒、デフォルト 10）
 
 set -euo pipefail
 
-CONTEXT_PAYLOAD="${HOME}/.boid/context/payload.yaml"
-
 echo "[auto-merge] starting"
+
+# --- gate は stdin 経由でタスク JSON を受け取る ---
+TASK_JSON=$(cat)
 
 # --- helper: boid task update でペイロードを更新 ---
 update_task_payload() {
@@ -26,19 +29,19 @@ update_task_payload() {
 }
 
 # --- 1. トリガー情報の取得 ---
-TASK_ID=$(python3 -c "
-import yaml, sys
-with open(sys.argv[1]) as f:
-    data = yaml.safe_load(f)
-print(data.get('_trigger', {}).get('task_id', '') or '')
-" "${CONTEXT_PAYLOAD}" 2>/dev/null || true)
+TASK_ID=$(printf '%s' "${TASK_JSON}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+payload = data.get('payload', {}) or {}
+print(payload.get('_trigger', {}).get('task_id', '') or '')
+" 2>/dev/null || true)
 
-PROJECT_ID=$(python3 -c "
-import yaml, sys
-with open(sys.argv[1]) as f:
-    data = yaml.safe_load(f)
-print(data.get('_trigger', {}).get('project_id', '') or '')
-" "${CONTEXT_PAYLOAD}" 2>/dev/null || true)
+PROJECT_ID=$(printf '%s' "${TASK_JSON}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+payload = data.get('payload', {}) or {}
+print(payload.get('_trigger', {}).get('project_id', '') or '')
+" 2>/dev/null || true)
 
 if [ -z "${TASK_ID}" ]; then
     echo "[auto-merge] ERROR: could not determine TASK_ID from payload"
