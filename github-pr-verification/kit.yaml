@@ -9,17 +9,6 @@ host_commands:
       - "-C * push*"
       - "-C * remote*"
       - "-C * status*"
-  # gh: GitHub CLI。gate は ProjectDir を CWD として動作するため
-  # .git/config からリポジトリを自動検出できる。
-  gh:
-    path: /usr/bin/gh
-    allow:
-      - "pr *"
-      - "run *"
-    stdin: true
-    env:
-      GH_TOKEN: "secret:"
-
 env:
   # ワークツリーのルートディレクトリ。
   # ${HOME} はスペック読み込み時にホスト側の環境変数で展開される。
