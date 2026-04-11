@@ -2,7 +2,7 @@
 # github-auto-merge script: auto-merge
 #
 # task_done イベントで発火する。
-# 完了タスクの PR を自動マージする。
+# 完了タスクの PR を自動マージし、コンフリクト時はタスクを reworking に戻す。
 #
 # gate として実行される。タスク JSON は stdin から受け取る。
 
@@ -73,6 +73,81 @@ if [ "${PR_STATE}" = "MERGED" ]; then
     echo "[auto-merge] PR already merged"
     MERGE_STATUS="already_merged"
 else
+    # --- 3a. mergeable ステータスのポーリング ---
+    MAX_RETRIES="${BOID_MERGE_POLL_RETRIES:-6}"
+    INTERVAL="${BOID_MERGE_POLL_INTERVAL:-10}"
+    MERGEABLE="UNKNOWN"
+
+    for i in $(seq 1 "${MAX_RETRIES}"); do
+        MERGEABLE=$(gh pr view "${PR_NUMBER}" --json mergeable --jq '.mergeable' 2>/dev/null || echo "UNKNOWN")
+
+        if [ "${MERGEABLE}" != "UNKNOWN" ]; then
+            echo "[auto-merge] PR #${PR_NUMBER} mergeable=${MERGEABLE} (attempt ${i}/${MAX_RETRIES})"
+            break
+        fi
+
+        echo "[auto-merge] PR #${PR_NUMBER} mergeable=UNKNOWN, retrying (attempt ${i}/${MAX_RETRIES})"
+
+        if [ "${i}" -lt "${MAX_RETRIES}" ]; then
+            sleep "${INTERVAL}"
+        fi
+    done
+
+    if [ "${MERGEABLE}" = "UNKNOWN" ]; then
+        echo "[auto-merge] WARNING: PR #${PR_NUMBER} still UNKNOWN after ${MAX_RETRIES} retries"
+    fi
+
+    # --- 3b. CONFLICTING: タスクを reworking に戻す ---
+    if [ "${MERGEABLE}" = "CONFLICTING" ]; then
+        echo "[auto-merge] PR #${PR_NUMBER} has merge conflicts, reopening task"
+
+        export PR_NUMBER PR_URL BRANCH
+        update_task_payload "${TASK_ID}" "$(python3 - <<'PYEOF'
+import os, json
+
+pr_number = int(os.environ['PR_NUMBER'])
+pr_url = os.environ['PR_URL']
+branch = os.environ['BRANCH']
+
+print(json.dumps({
+    'artifact': {
+        'pr': {
+            'number': pr_number,
+            'url': pr_url,
+            'branch': branch,
+            'merged': False,
+            'error': 'conflict',
+        },
+    },
+    'verification': {
+        'findings': [{
+            'message': (
+                f'PR #{pr_number} ({pr_url}) が base ブランチとマージコンフリクトしています。\n'
+                f'worktree で以下を実行してコンフリクトを解消してください:\n'
+                f'\n'
+                f'  1. git merge origin/main\n'
+                f'  2. コンフリクトを解消\n'
+                f'  3. git add <resolved_files> && git commit\n'
+                f'\n'
+                f'注意:\n'
+                f'  - git rebase は使わないこと（fast-forward 互換な履歴を保つため）\n'
+                f'  - git push は不要（pr-verify gate が自動で push する）\n'
+                f'  - hook role からは git fetch/push が禁止されているため手動で fetch しないこと'
+            ),
+            'status': 'open',
+        }],
+    },
+}))
+PYEOF
+)"
+
+        boid task reopen "${TASK_ID}" 2>&1 || echo "[auto-merge] WARNING: boid task reopen failed" >&2
+
+        echo "[auto-merge] done (conflict detected, task reopened)"
+        exit 0
+    fi
+
+    # --- 3c. MERGEABLE または UNKNOWN 残存: マージを試みる ---
     MERGE_STDERR_FILE=$(mktemp /tmp/boid-auto-merge-err.XXXXXX)
     MERGE_EXIT=0
 
