@@ -8,11 +8,12 @@
 #   3. GitHub Actions の完了を待機し、結果を verification として payload に出力
 #
 
-# 【one-shot-feedback との連携】
+# 【統合 state machine との連携】
 #   verification findings を payload に出力することで、
-#   one-shot-feedback ステートマシンの自己ループ条件を駆動できる:
-#     - findings すべて resolved または verification なし → executing → done
-#     - findings に open あり → executing → executing (修正ループ)
+#   統合 state machine の遷移条件を駆動する:
+#     - findings すべて resolved → executing → verifying → done（pass-through）
+#     - findings に open あり → executing → reworking（rework 用 instruction が発火）
+#     - reworking でも gate が再発火するので CI 成功で done に向かう
 #
 # 環境変数:
 #   BOID_WORKTREE_ROOT   ワークツリーのルートディレクトリ（kit env で設定済み）
@@ -212,8 +213,8 @@ fi
 
 # --- CI 完了待機 ---
 # BOID_PR_VERIFY_TIMEOUT × 10 秒のタイムアウト（デフォルト 30 分）
-# one-shot-feedback を使う場合、CI が失敗しても dispatch loop が
-# エージェントを再実行するため、ここでは 1 回の結果を返せば十分。
+# 統合モデルでは CI が失敗しても reworking 経由で gate が再発火し
+# エージェントが再実行されるため、ここでは 1 回の結果を返せば十分。
 TIMEOUT="${BOID_PR_VERIFY_TIMEOUT:-180}"
 CONCLUSION=""
 RUN_STATUS=""

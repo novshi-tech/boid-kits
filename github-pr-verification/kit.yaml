@@ -35,7 +35,6 @@ gates:
 #
 #   task_behaviors:
 #     dev:
-#       transition: one-shot-feedback   # CI 修正ループあり
 #       worktree: true                  # ブランチ分離が必要
 #       traits: [instructions]
 #       default_payload:
@@ -45,8 +44,8 @@ gates:
 #             consumer: claude-code
 #             message: "実装が完了したら commit & push してください。"
 #
-# one-shot-feedback の動作:
-#   - artifact 存在 かつ executing-state の verification findings がすべて resolved → done
-#   - artifact 存在 かつ executing-state の verification findings に open あり → executing に自己ループ
-#     (サービスの dispatch loop が再度 hooks+gates を実行 → エージェントが CI 失敗を受け取り修正)
-#   - artifact 存在 かつ verification なし → done (CI 未設定の場合)
+# 統合 state machine での pr-verify gate の動作:
+#   - artifact 存在 かつ executing-state の verification findings がすべて resolved → done（verifying pass-through 経由）
+#   - artifact 存在 かつ executing-state の verification findings に open あり → reworking に遷移
+#   - reworking でも pr-verify gate が再発火し、CI 成功で reworking → done
+#   - artifact 存在 かつ verification なし → done（CI 未設定の場合）
