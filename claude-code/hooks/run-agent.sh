@@ -31,10 +31,13 @@ fi
 set +e
 if [ "${BOID_INTERACTIVE:-0}" = "1" ]; then
     claude --dangerously-skip-permissions $SESSION_FLAG $MODEL_FLAG "/boid-sandbox"
+    CLAUDE_EXIT=$?
 else
-    claude --dangerously-skip-permissions --verbose --output-format=stream-json --include-partial-messages $SESSION_FLAG $MODEL_FLAG -p "/boid-sandbox"
+    claude --dangerously-skip-permissions --verbose --output-format=stream-json \
+        $SESSION_FLAG $MODEL_FLAG -p "/boid-sandbox" \
+        | python3 "$(dirname "$0")/format-stream.py"
+    CLAUDE_EXIT=${PIPESTATUS[0]}
 fi
-CLAUDE_EXIT=$?
 set -e
 
 # セッションマーカーを永続化（次回 rework で resume するため）
