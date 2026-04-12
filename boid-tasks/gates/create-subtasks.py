@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-done gate: tasks トレイトのペイロードからサブタスクを登録する。
+create-subtasks gate (entry gate on done):
+tasks トレイトのペイロードからサブタスクを登録する。
+
+done 入場時に発火し、親タスクの最終的な tasks trait を使ってサブタスクを生成する。
+verifying → reworking のバウンス後でも、最終 done 到達時の tasks のみで生成される。
 
 stdin: TaskJSON (完全なタスクデータ)
 stdout: payload_patch (空 = 変更なし)

@@ -1,5 +1,7 @@
 gates:
-  - id: done
-    on: [executing]
+  - id: create-subtasks
+    on: [done]
+    phase: entry
+    behavior: [plan, auto_plan]
     traits:
       consumes: [tasks]

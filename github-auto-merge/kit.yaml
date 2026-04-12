@@ -5,9 +5,17 @@ env:
   BOID_MERGE_POLL_RETRIES: "6"
   BOID_MERGE_POLL_INTERVAL: "10"
 
-scripts:
+gates:
+  - id: mergeable-check
+    on: [verifying]
+    phase: exit
+    behavior: dev
+    traits:
+      produces: [verification]
+
   - id: auto-merge
-    description: "完了タスクの PR を自動マージし、コンフリクト時はタスクを reworking に戻す"
-    on: [task_done]
-    filter:
-      behavior: dev
+    on: [done]
+    phase: entry
+    behavior: dev
+    traits:
+      produces: [artifact]
