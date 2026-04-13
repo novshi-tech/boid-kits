@@ -164,17 +164,24 @@ PR_URL=$(gh pr list --head "${BRANCH}" --json url \
 
 if [ -z "$PR_URL" ]; then
     echo "[pr-verify] creating PR for ${BRANCH}"
+    GH_CREATE_EXIT=0
     GH_OUT=$(gh pr create \
         --head "${BRANCH}" \
         --title "${TASK_TITLE:-Task ${TASK_SHORT}}" \
-        --body "boid task: ${TASK_ID}" 2>/dev/null || true)
+        --body "boid task: ${TASK_ID}" 2>&1) || GH_CREATE_EXIT=$?
+    if [ "${GH_CREATE_EXIT}" -ne 0 ]; then
+        echo "[pr-verify] gh pr create failed (exit=${GH_CREATE_EXIT}):"
+        printf '%s\n' "${GH_OUT}" | sed 's/^/[pr-verify]   /'
+        exit 1
+    fi
     # gh pr create outputs the PR URL as the last line on success
-    PR_URL=$(echo "${GH_OUT}" | grep -E '^https://' | tail -1 || true)
+    PR_URL=$(printf '%s\n' "${GH_OUT}" | grep -E '^https://' | tail -1 || true)
 fi
 
 if [ -z "$PR_URL" ]; then
-    echo "[pr-verify] could not create PR (no commits ahead of base?), skipping"
-    exit 0
+    echo "[pr-verify] gh pr create exited 0 but no PR URL found in output:"
+    printf '%s\n' "${GH_OUT}" | sed 's/^/[pr-verify]   /'
+    exit 1
 fi
 
 echo "[pr-verify] PR: ${PR_URL}"
