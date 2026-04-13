@@ -124,8 +124,9 @@ def main():
         exit_code = result.returncode
     else:
         args.extend(["--verbose", "--output-format=stream-json", "-p", "/boid-sandbox"])
-        script_dir = Path(__file__).resolve().parent
-        format_stream = str(script_dir / "format-stream.py")
+        script_path = Path(__file__).resolve()
+        prefix = script_path.name.split("--", 1)[0] + "--" if "--" in script_path.name else ""
+        format_stream = str(script_path.parent / f"{prefix}format-stream.py")
 
         claude_proc = subprocess.Popen(
             ["setsid", "-w"] + args,
