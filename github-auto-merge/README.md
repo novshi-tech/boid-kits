@@ -14,5 +14,5 @@
   - `verification.findings` にコンフリクト解消手順を `open` ステータスで書き込む
   - `boid task reopen` でタスクを reworking に戻す
 - `mergeable == MERGEABLE` の場合:
-  - `gh pr merge --merge --delete-branch` で PR をマージ
+  - `gh pr merge --merge` で PR をマージ（ローカルブランチは boid が worktree 撤収時に掃除するため `--delete-branch` は付けない）
   - merge 成功/失敗を `artifact.auto-merge.pr` に記録

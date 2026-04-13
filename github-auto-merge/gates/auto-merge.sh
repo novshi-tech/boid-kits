@@ -68,7 +68,7 @@ fi
 MERGE_STDERR_FILE=$(mktemp /tmp/boid-auto-merge-err.XXXXXX)
 MERGE_EXIT=0
 
-gh pr merge "${PR_NUMBER}" --merge --delete-branch 2>"${MERGE_STDERR_FILE}" || MERGE_EXIT=$?
+gh pr merge "${PR_NUMBER}" --merge 2>"${MERGE_STDERR_FILE}" || MERGE_EXIT=$?
 MERGE_STDERR=$(cat "${MERGE_STDERR_FILE}")
 rm -f "${MERGE_STDERR_FILE}"
 
