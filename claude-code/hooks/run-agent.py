@@ -8,6 +8,8 @@ import sys
 import uuid
 from pathlib import Path
 
+import yaml
+
 
 def get_sessions(payload):
     if not isinstance(payload, dict):
@@ -58,14 +60,46 @@ def build_payload_patch(sessions):
     }
 
 
+def merge_sessions_into_patch(existing, sessions):
+    # agent が書いた payload_patch.yaml を保持したまま sessions だけ差し替える。
+    # 上書きすると plan agent が書いた tasks: などが失われる。
+    if not isinstance(existing, dict):
+        existing = {}
+    patch = existing.setdefault("payload_patch", {})
+    if not isinstance(patch, dict):
+        patch = {}
+        existing["payload_patch"] = patch
+    artifact = patch.setdefault("artifact", {})
+    if not isinstance(artifact, dict):
+        artifact = {}
+        patch["artifact"] = artifact
+    claude_code = artifact.setdefault("claude_code", {})
+    if not isinstance(claude_code, dict):
+        claude_code = {}
+        artifact["claude_code"] = claude_code
+    claude_code["sessions"] = sessions
+    return existing
+
+
 def write_payload_patch(sessions, output_dir=None):
     if output_dir is None:
         output_dir = str(Path.home() / ".boid" / "output")
     os.makedirs(output_dir, exist_ok=True)
-    patch = build_payload_patch(sessions)
     output_path = os.path.join(output_dir, "payload_patch.yaml")
+
+    existing = {}
+    if os.path.exists(output_path):
+        try:
+            with open(output_path) as f:
+                loaded = yaml.safe_load(f)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (yaml.YAMLError, OSError):
+            existing = {}
+
+    merged = merge_sessions_into_patch(existing, sessions)
     with open(output_path, "w") as f:
-        json.dump(patch, f, indent=2)
+        yaml.safe_dump(merged, f, sort_keys=False, allow_unicode=True)
 
 
 def read_payload_from_file(path):

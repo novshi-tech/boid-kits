@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+import yaml
+
 _spec = importlib.util.spec_from_file_location(
     "run_agent",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "run-agent.py"),
@@ -160,7 +162,7 @@ class TestBuildPayloadPatch(unittest.TestCase):
 
 
 class TestWritePayloadPatch(unittest.TestCase):
-    def test_writes_valid_json(self):
+    def test_writes_valid_yaml(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sessions = [{"type": "executor", "name": "", "id": "test-id"}]
             run_agent.write_payload_patch(sessions, output_dir=tmpdir)
@@ -169,7 +171,7 @@ class TestWritePayloadPatch(unittest.TestCase):
             self.assertTrue(os.path.exists(output_path))
 
             with open(output_path) as f:
-                data = json.load(f)
+                data = yaml.safe_load(f)
 
             self.assertIn("payload_patch", data)
             self.assertEqual(
@@ -183,6 +185,112 @@ class TestWritePayloadPatch(unittest.TestCase):
             sessions = [{"type": "executor", "name": "", "id": "test-id"}]
             run_agent.write_payload_patch(sessions, output_dir=nested)
             self.assertTrue(os.path.exists(os.path.join(nested, "payload_patch.yaml")))
+
+    def test_preserves_agent_written_tasks(self):
+        # plan agent が書いた payload_patch.tasks を hook が上書きで失わないこと。
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            agent_written = {
+                "payload_patch": {
+                    "tasks": [
+                        {
+                            "title": "child task",
+                            "ref": "task-a",
+                            "behavior": "dev",
+                            "description": "do the thing",
+                        }
+                    ],
+                    "artifact": {
+                        "claude_code": {
+                            "sessions": [
+                                {"type": "executor", "name": "", "id": "old-id"}
+                            ]
+                        }
+                    },
+                }
+            }
+            with open(output_path, "w") as f:
+                yaml.safe_dump(agent_written, f)
+
+            sessions = [{"type": "executor", "name": "", "id": "new-id"}]
+            run_agent.write_payload_patch(sessions, output_dir=tmpdir)
+
+            with open(output_path) as f:
+                data = yaml.safe_load(f)
+
+            self.assertEqual(
+                data["payload_patch"]["tasks"][0]["title"], "child task"
+            )
+            self.assertEqual(
+                data["payload_patch"]["artifact"]["claude_code"]["sessions"],
+                sessions,
+            )
+
+    def test_preserves_other_artifact_keys(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            with open(output_path, "w") as f:
+                yaml.safe_dump(
+                    {
+                        "payload_patch": {
+                            "artifact": {
+                                "custom_key": {"foo": "bar"},
+                                "claude_code": {"sessions": []},
+                            }
+                        }
+                    },
+                    f,
+                )
+
+            run_agent.write_payload_patch(
+                [{"type": "executor", "name": "", "id": "x"}], output_dir=tmpdir
+            )
+
+            with open(output_path) as f:
+                data = yaml.safe_load(f)
+
+            self.assertEqual(
+                data["payload_patch"]["artifact"]["custom_key"], {"foo": "bar"}
+            )
+
+    def test_corrupt_existing_falls_back_to_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            with open(output_path, "w") as f:
+                f.write("\t\tnot: valid: yaml: ::\n")
+
+            sessions = [{"type": "executor", "name": "", "id": "x"}]
+            run_agent.write_payload_patch(sessions, output_dir=tmpdir)
+
+            with open(output_path) as f:
+                data = yaml.safe_load(f)
+            self.assertEqual(
+                data["payload_patch"]["artifact"]["claude_code"]["sessions"],
+                sessions,
+            )
+
+
+class TestMergeSessionsIntoPatch(unittest.TestCase):
+    def test_empty_existing(self):
+        sessions = [{"type": "executor", "name": "", "id": "abc"}]
+        result = run_agent.merge_sessions_into_patch({}, sessions)
+        self.assertEqual(
+            result["payload_patch"]["artifact"]["claude_code"]["sessions"], sessions
+        )
+
+    def test_existing_tasks_preserved(self):
+        existing = {"payload_patch": {"tasks": [{"title": "t"}]}}
+        result = run_agent.merge_sessions_into_patch(existing, [])
+        self.assertEqual(result["payload_patch"]["tasks"], [{"title": "t"}])
+
+    def test_top_level_keys_preserved(self):
+        existing = {"some_other_top_level": True, "payload_patch": {}}
+        result = run_agent.merge_sessions_into_patch(existing, [])
+        self.assertTrue(result["some_other_top_level"])
+
+    def test_invalid_existing_replaced(self):
+        result = run_agent.merge_sessions_into_patch("not a dict", [])
+        self.assertIn("payload_patch", result)
 
 
 class TestReadPayloadFromFile(unittest.TestCase):
