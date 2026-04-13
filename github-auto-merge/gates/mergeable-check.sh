@@ -72,24 +72,22 @@ pr_url = os.environ['PR_URL']
 patch = {
     'payload_patch': {
         'verification': {
-            'mergeable-check': {
-                'findings': [{
-                    'message': (
-                        f'PR #{pr_number} ({pr_url}) が base ブランチとマージコンフリクトしています。\n'
-                        f'worktree で以下を実行してコンフリクトを解消してください:\n'
-                        f'\n'
-                        f'  1. git merge origin/main\n'
-                        f'  2. コンフリクトを解消\n'
-                        f'  3. git add <resolved_files> && git commit\n'
-                        f'\n'
-                        f'注意:\n'
-                        f'  - git rebase は使わないこと（fast-forward 互換な履歴を保つため）\n'
-                        f'  - git push は不要（pr-verify gate が自動で push する）\n'
-                        f'  - hook role からは git fetch/push が禁止されているため手動で fetch しないこと'
-                    ),
-                    'status': 'open',
-                }],
-            },
+            'findings': [{
+                'message': (
+                    f'PR #{pr_number} ({pr_url}) が base ブランチとマージコンフリクトしています。\n'
+                    f'worktree で以下を実行してコンフリクトを解消してください:\n'
+                    f'\n'
+                    f'  1. git merge origin/main\n'
+                    f'  2. コンフリクトを解消\n'
+                    f'  3. git add <resolved_files> && git commit\n'
+                    f'\n'
+                    f'注意:\n'
+                    f'  - git rebase は使わないこと（fast-forward 互換な履歴を保つため）\n'
+                    f'  - git push は不要（pr-verify gate が自動で push する）\n'
+                    f'  - hook role からは git fetch/push が禁止されているため手動で fetch しないこと'
+                ),
+                'status': 'open',
+            }],
         },
     },
 }
@@ -107,9 +105,7 @@ import yaml
 patch = {
     'payload_patch': {
         'verification': {
-            'mergeable-check': {
-                'findings': [],
-            },
+            'findings': [],
         },
     },
 }
