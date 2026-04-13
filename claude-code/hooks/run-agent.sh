@@ -34,9 +34,8 @@ if [ "${BOID_INTERACTIVE:-0}" = "1" ]; then
     CLAUDE_EXIT=$?
 else
     claude --dangerously-skip-permissions --verbose --output-format=stream-json \
-        $SESSION_FLAG $MODEL_FLAG -p "/boid-sandbox" \
-        | python3 "$(dirname "$0")/$(basename "$0" | sed 's/run-agent\.sh$/format-stream.py/')"
-    CLAUDE_EXIT=${PIPESTATUS[0]}
+        $SESSION_FLAG $MODEL_FLAG -p "/boid-sandbox"
+    CLAUDE_EXIT=$?
 fi
 set -e
 
