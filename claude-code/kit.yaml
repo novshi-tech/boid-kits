@@ -1,3 +1,17 @@
+meta:
+  name: Claude Code
+  description: Claude Code エージェントをサンドボックスで実行する
+  category: agent
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - claude
+
+provides_consumer: claude-code
+
 additional_bindings:
   - source: ${HOME}/.local/bin
   - source: ${HOME}/.local/share/claude

@@ -1,3 +1,16 @@
+meta:
+  name: boid-tasks
+  description: boid タスク管理の標準ゲートとスキャフォールドを提供する
+  category: workflow
+
+detect:
+  script: detect.sh
+
+scaffold:
+  task_behaviors:
+    description: Default task behaviors (dev / plan / auto_plan)
+    template: behaviors.tmpl
+
 gates:
   - id: create-subtasks
     on: [done]

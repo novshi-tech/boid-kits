@@ -1,3 +1,15 @@
+meta:
+  name: GitHub CLI
+  description: GitHub CLI (gh) をサンドボックスに提供する
+  category: ci
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - gh
+
 host_commands:
   gh:
     path: /usr/bin/gh

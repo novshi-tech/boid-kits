@@ -1,3 +1,16 @@
+meta:
+  name: GitHub PR verification
+  description: GitHub PR の CI 検証を自動化する
+  category: ci
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - git
+    - gh
+
 host_commands:
   # git-cmd: ホスト上の git を worktree パス指定で実行するためのコマンド。
   # broker はホスト上で実行するため、"-C <worktree_path>" でワークツリーの

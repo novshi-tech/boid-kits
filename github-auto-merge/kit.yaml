@@ -1,3 +1,15 @@
+meta:
+  name: GitHub auto-merge
+  description: GitHub PR の auto-merge を自動化する
+  category: workflow
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - gh
+
 builtin_commands:
   - boid
 

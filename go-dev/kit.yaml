@@ -1,3 +1,15 @@
+meta:
+  name: Go development
+  description: Go 開発環境 (GOPATH / go モジュール) をサンドボックスにマウントする
+  category: language
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - go
+
 additional_bindings:
   - source: ${HOME}/.local/share/go
   - source: ${HOME}/go

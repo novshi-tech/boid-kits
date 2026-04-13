@@ -1,3 +1,18 @@
+meta:
+  name: Codex
+  description: Codex エージェントをサンドボックスで実行する
+  category: agent
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - codex
+    - python3
+
+provides_consumer: codex
+
 additional_bindings:
   - source: ${HOME}/.volta
   - source: ${HOME}/.codex
