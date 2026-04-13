@@ -33,9 +33,16 @@ if [ "${BOID_INTERACTIVE:-0}" = "1" ]; then
     claude --dangerously-skip-permissions $SESSION_FLAG $MODEL_FLAG "/boid-sandbox"
     CLAUDE_EXIT=$?
 else
-    claude --dangerously-skip-permissions --verbose --output-format=stream-json \
-        $SESSION_FLAG $MODEL_FLAG -p "/boid-sandbox"
-    CLAUDE_EXIT=$?
+    # claude を controlling terminal から切り離した非 TTY 環境で起動する
+    # (stdin=/dev/null, stderr→stdout pipe, setsid で新セッション)。
+    # PTY slave に直接出力すると、tmux attach 時の SIGWINCH で claude (Ink/
+    # Node.js) が exit(0) してしまうため、stdout は python3 経由で整形して
+    # PTY に書く構成にする。
+    setsid -w claude --dangerously-skip-permissions --verbose --output-format=stream-json \
+        $SESSION_FLAG $MODEL_FLAG -p "/boid-sandbox" \
+        < /dev/null 2>&1 \
+        | python3 "$(dirname "$0")/$(basename "$0" | sed 's/run-agent\.sh$/format-stream.py/')"
+    CLAUDE_EXIT=${PIPESTATUS[0]}
 fi
 set -e
 
