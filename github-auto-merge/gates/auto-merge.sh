@@ -48,11 +48,13 @@ import os, yaml
 patch = {
     'payload_patch': {
         'artifact': {
-            'pr': {
-                'number': int(os.environ['PR_NUMBER']),
-                'url': os.environ['PR_URL'],
-                'branch': os.environ['BRANCH'],
-                'merged': True,
+            'auto-merge': {
+                'pr': {
+                    'number': int(os.environ['PR_NUMBER']),
+                    'url': os.environ['PR_URL'],
+                    'branch': os.environ['BRANCH'],
+                    'merged': True,
+                },
             },
         },
     },
@@ -79,11 +81,13 @@ import os, yaml
 patch = {
     'payload_patch': {
         'artifact': {
-            'pr': {
-                'number': int(os.environ['PR_NUMBER']),
-                'url': os.environ['PR_URL'],
-                'branch': os.environ['BRANCH'],
-                'merged': True,
+            'auto-merge': {
+                'pr': {
+                    'number': int(os.environ['PR_NUMBER']),
+                    'url': os.environ['PR_URL'],
+                    'branch': os.environ['BRANCH'],
+                    'merged': True,
+                },
             },
         },
     },
@@ -99,12 +103,14 @@ import os, yaml
 patch = {
     'payload_patch': {
         'artifact': {
-            'pr': {
-                'number': int(os.environ['PR_NUMBER']),
-                'url': os.environ['PR_URL'],
-                'branch': os.environ['BRANCH'],
-                'merged': False,
-                'error': 'late_conflict',
+            'auto-merge': {
+                'pr': {
+                    'number': int(os.environ['PR_NUMBER']),
+                    'url': os.environ['PR_URL'],
+                    'branch': os.environ['BRANCH'],
+                    'merged': False,
+                    'error': 'late_conflict',
+                },
             },
         },
     },

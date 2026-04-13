@@ -52,7 +52,9 @@ if [ -z "${PR_INFO}" ] || [ "${PR_INFO}" = "null" ]; then
 import json
 print(json.dumps({
     'artifact': {
-        'pr': {'number': None, 'url': None, 'branch': '${BRANCH}', 'merged': False, 'error': None},
+        'auto-merge': {
+            'pr': {'number': None, 'url': None, 'branch': '${BRANCH}', 'merged': False, 'error': None},
+        },
     },
 }))
 ")"
@@ -111,12 +113,14 @@ branch = os.environ['BRANCH']
 
 print(json.dumps({
     'artifact': {
-        'pr': {
-            'number': pr_number,
-            'url': pr_url,
-            'branch': branch,
-            'merged': False,
-            'error': 'conflict',
+        'auto-merge': {
+            'pr': {
+                'number': pr_number,
+                'url': pr_url,
+                'branch': branch,
+                'merged': False,
+                'error': 'conflict',
+            },
         },
     },
     'verification': {
@@ -177,12 +181,14 @@ merge_status = os.environ.get('MERGE_STATUS', '')
 
 print(json.dumps({
     'artifact': {
-        'pr': {
-            'number': pr_number,
-            'url': os.environ.get('PR_URL', ''),
-            'branch': os.environ.get('BRANCH', ''),
-            'merged': merge_status in ('merged', 'already_merged'),
-            'error': merge_error,
+        'auto-merge': {
+            'pr': {
+                'number': pr_number,
+                'url': os.environ.get('PR_URL', ''),
+                'branch': os.environ.get('BRANCH', ''),
+                'merged': merge_status in ('merged', 'already_merged'),
+                'error': merge_error,
+            },
         },
     },
 }))
