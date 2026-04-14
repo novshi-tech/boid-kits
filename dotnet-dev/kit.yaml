@@ -1,0 +1,22 @@
+meta:
+  name: .NET development
+  description: .NET SDK (dotnet) 向けのユーザーローカル状態をサンドボックスにマウントする
+  category: language
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - dotnet
+
+additional_bindings:
+  - source: ${HOME}/.nuget
+    mode: rw
+  - source: ${HOME}/.dotnet
+    mode: rw
+
+env:
+  DOTNET_ROOT: /usr/lib/dotnet
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
