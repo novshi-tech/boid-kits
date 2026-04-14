@@ -1,0 +1,17 @@
+meta:
+  name: Volta
+  description: Volta (Node バージョンマネージャ) をサンドボックスにマウントする
+  category: language
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - volta
+
+additional_bindings:
+  - source: ${HOME}/.volta
+
+env:
+  VOLTA_HOME: ${HOME}/.volta
