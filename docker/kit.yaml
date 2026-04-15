@@ -1,0 +1,26 @@
+meta:
+  name: Docker API access
+  description: |
+    サンドボックス内から cetusguard proxy 経由でホストの Docker API に
+    アクセスする。TestContainers 等で使用。素 socket の直結は行わない
+    ため、ホスト側で cetusguard 常駐が必要。
+    ホスト側の backend daemon は docker でも podman でもよい (podman は
+    Docker API 互換なのでそのまま使える)。
+  category: tool
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - docker
+
+additional_bindings:
+  - source: ${XDG_RUNTIME_DIR}/cetusguard/docker.sock
+    mode: rw
+
+env:
+  DOCKER_HOST: unix://${XDG_RUNTIME_DIR}/cetusguard/docker.sock
+  CONTAINER_HOST: unix://${XDG_RUNTIME_DIR}/cetusguard/docker.sock
+  TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: ${XDG_RUNTIME_DIR}/cetusguard/docker.sock
+  TESTCONTAINERS_RYUK_DISABLED: "false"

@@ -1,26 +1,30 @@
-# podman
+# docker
 
-サンドボックス内から cetusguard proxy 経由でホストの podman/docker API にアクセスする kit。
+サンドボックス内から cetusguard proxy 経由でホストの Docker API にアクセスする kit。
 TestContainers 等のコンテナベースのテストフレームワークで使用する。
+
+ホスト側の backend daemon は docker でも podman でもよい。podman は Docker API
+互換なので、cetusguard の backend-addr を podman socket に向けるだけで
+sandbox 内の docker クライアントからそのまま利用できる。
 
 ## セキュリティモデル
 
 ### boid が保証すること
 
 - sandbox から外部に出る経路はこの kit で宣言した socket
-  (`${XDG_RUNTIME_DIR}/cetusguard/podman.sock`) のみ
-- socket パスを cetusguard proxy に固定しているため、素の podman socket を
+  (`${XDG_RUNTIME_DIR}/cetusguard/docker.sock`) のみ
+- socket パスを cetusguard proxy に固定しているため、素の docker/podman socket を
   誤って sandbox に通す事故を防ぐ
 
 ### boid が保証しないこと
 
-- socket の先にある podman/docker API 呼び出しの制限。API レベルの
-  アクセス制御は cetusguard のルール設定に委ねる
+- socket の先にある Docker API 呼び出しの制限。API レベルのアクセス制御は
+  cetusguard のルール設定に委ねる
 
-### 素の podman socket を直結してはいけない理由
+### 素の socket を直結してはいけない理由
 
-`$XDG_RUNTIME_DIR/podman/podman.sock` や `/var/run/docker.sock` を sandbox に
-直結すると、sandbox 内のプロセスが制限なく Docker/Podman API を呼び出せる。
+`/var/run/docker.sock` や `$XDG_RUNTIME_DIR/podman/podman.sock` を sandbox に
+直結すると、sandbox 内のプロセスが制限なく Docker API を呼び出せる。
 これにより以下の攻撃が可能になる:
 
 - **任意 bind mount**: ホストの `/` をコンテナ内にマウントし、root 権限を奪取
@@ -139,7 +143,7 @@ Type=simple
 ExecStartPre=/bin/mkdir -p %t/cetusguard
 ExecStart=%h/go/bin/cetusguard \
   -backend-addr unix://%t/podman/podman.sock \
-  -frontend-addr unix://%t/cetusguard/podman.sock \
+  -frontend-addr unix://%t/cetusguard/docker.sock \
   -rules-file %h/.config/cetusguard/rules.txt
 Restart=on-failure
 RestartSec=5
@@ -149,6 +153,11 @@ WantedBy=default.target
 ```
 
 > `%t` は systemd の `$XDG_RUNTIME_DIR` 展開、`%h` は `$HOME` 展開。
+>
+> backend に docker daemon を使う場合は `-backend-addr` を
+> `unix:///var/run/docker.sock` 等に変更する。frontend socket 名は
+> backend の種別に関わらず `docker.sock` に統一している (sandbox 内の
+> docker クライアントから見た名前として自然なため)。
 >
 > socket の権限は cetusguard が自身で設定する。`$XDG_RUNTIME_DIR` 自体が 0700
 > (owner only) であり他ユーザはそもそも到達できないため、追加の chmod は不要。
@@ -184,13 +193,14 @@ cetusguard は **HTTP メソッド + URL パス** に基づくフィルタリン
 
 これらの制約を強制するには、以下の補完的な対策を検討すること:
 
-- **rootless podman の使用**: rootless モードではそもそも privileged コンテナや
-  host path bind mount の影響範囲がユーザ名前空間に限定される
-- **containers.conf でのデフォルト制限**: podman の設定で `no_new_privileges=true`
-  等を設定する
+- **rootless 実行の使用**: rootless docker / rootless podman ではそもそも
+  privileged コンテナや host path bind mount の影響範囲がユーザ名前空間に
+  限定される
+- **daemon デフォルト制限**: docker の `daemon.json` や podman の
+  `containers.conf` で `no_new_privileges=true` 等を設定する
 - **OCI hook や seccomp プロファイル**: コンテナ実行時の syscall を制限する
 
-rootless podman + cetusguard の URL フィルタリングを組み合わせることで、
+rootless backend + cetusguard の URL フィルタリングを組み合わせることで、
 実用的なセキュリティレベルを確保できる。
 
 ## 動作確認
@@ -198,7 +208,7 @@ rootless podman + cetusguard の URL フィルタリングを組み合わせる�
 ### 1. cetusguard proxy の稼働確認
 
 ```sh
-curl --unix-socket ${XDG_RUNTIME_DIR}/cetusguard/podman.sock http://d/_ping
+curl --unix-socket ${XDG_RUNTIME_DIR}/cetusguard/docker.sock http://d/_ping
 ```
 
 `OK` が返れば proxy は稼働中。
@@ -207,9 +217,9 @@ curl --unix-socket ${XDG_RUNTIME_DIR}/cetusguard/podman.sock http://d/_ping
 
 ```sh
 # sandbox 内で実行
-podman ps
-# または
 docker ps
+# podman クライアントでも可 (DOCKER_HOST を参照する)
+podman ps
 ```
 
 コンテナ一覧が取得できれば正常に動作している。
@@ -225,8 +235,9 @@ TestContainers を使うプロジェクトでテストを実行し、コンテ�
   なさない。上記の推奨ルールセットは TestContainers 用途の最小権限を意図している
   が、ボディレベルの制約は強制できない
 - **proxy 稼働チェックなし**: kit 側で cetusguard が起動しているかどうかは
-  検出しない。未起動時は sandbox 内で podman/docker が使えないだけで安全に失敗する
+  検出しない。未起動時は sandbox 内で docker が使えないだけで安全に失敗する
 - **task ごとのポリシー差別化は行わない**: 全 task で同一の cetusguard ルールが
   適用される。task ごとにポリシーを変えると穴空きリスクが増えるため意図的な設計
-- **OR 条件の commands 未対応**: `requires.commands` は AND 条件のため `podman` を
-  primary として指定。docker のみの環境では `podman` コマンドのインストールが必要
+- **OR 条件の commands 未対応**: `requires.commands` は AND 条件のため `docker` を
+  primary として指定。podman のみの環境では `docker` コマンドとして podman を
+  呼べるよう `podman-docker` パッケージや alias/symlink の設定が必要
