@@ -35,13 +35,14 @@ TestContainers 等のコンテナベースのテストフレームワークで�
 
 ### 1. cetusguard のインストール
 
-Go がインストール済みの場合:
+Go がインストール済みの場合 (`~/go/bin/cetusguard` に配置される):
 
 ```sh
 go install github.com/hectorm/cetusguard/cmd/cetusguard@latest
 ```
 
-または GitHub Releases からバイナリを取得:
+または GitHub Releases からバイナリを取得 (`~/.local/bin/cetusguard` に配置する例。
+この場合は後述の unit の `ExecStart` パスを `%h/.local/bin/cetusguard` に変更すること):
 
 ```sh
 # アーキテクチャに合わせて URL を調整
@@ -136,11 +137,10 @@ Documentation=https://github.com/hectorm/cetusguard
 [Service]
 Type=simple
 ExecStartPre=/bin/mkdir -p %t/cetusguard
-ExecStart=%h/.local/bin/cetusguard \
+ExecStart=%h/go/bin/cetusguard \
   -backend-addr unix://%t/podman/podman.sock \
   -frontend-addr unix://%t/cetusguard/podman.sock \
   -rules-file %h/.config/cetusguard/rules.txt
-ExecStartPost=/bin/chmod 0660 %t/cetusguard/podman.sock
 Restart=on-failure
 RestartSec=5
 
@@ -149,6 +149,12 @@ WantedBy=default.target
 ```
 
 > `%t` は systemd の `$XDG_RUNTIME_DIR` 展開、`%h` は `$HOME` 展開。
+>
+> socket の権限は cetusguard が自身で設定する。`$XDG_RUNTIME_DIR` 自体が 0700
+> (owner only) であり他ユーザはそもそも到達できないため、追加の chmod は不要。
+> Type=simple では ExecStartPost が socket 作成前に走りレースするため、
+> chmod を入れる場合は `sh -c 'until [ -S ... ]; do sleep 0.1; done; chmod ...'`
+> のような待機付きが必要。
 
 ### 5. 有効化
 
