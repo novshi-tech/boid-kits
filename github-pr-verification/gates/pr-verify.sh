@@ -58,30 +58,12 @@ diag() {
 diag "task_short=${TASK_SHORT}"
 diag "branch=${BRANCH}"
 
-# --- リモート URL の取得（broker 経由の builtin git）---
-# gate はファイルシステムアクセスを持たないため、git shim を broker 経由で実行し
-# ProjectDir の .git/config からリモート URL を取得する。
-# `remote` は localGitSubcommands に含まれないため broker 経由でホスト実行される。
-REMOTE_URL=$(git remote get-url origin 2>/dev/null || true)
-diag "remote_url=${REMOTE_URL:-empty}"
-
-if [ -z "$REMOTE_URL" ]; then
-    echo "[pr-verify] no remote origin found, skipping"
-    exit 0
-fi
-
 # --- ブランチ状態を記録（broker 経由）---
 # show-ref / ls-remote は localGitSubcommands に含まれないため broker 経由でホスト実行される。
 LOCAL_HEAD=$(git show-ref --hash "refs/heads/${BRANCH}" 2>/dev/null || echo "?")
 ORIGIN_HEAD=$(git ls-remote origin "refs/heads/${BRANCH}" 2>/dev/null | awk '{print $1}' || echo "?")
 diag "local_head=${LOCAL_HEAD}"
 diag "origin_head=${ORIGIN_HEAD}"
-
-# --- GitHub リポジトリ確認 ---
-if ! printf '%s' "$REMOTE_URL" | grep -q 'github\.com'; then
-    echo "[pr-verify] not a GitHub remote (${REMOTE_URL}), skipping"
-    exit 0
-fi
 
 # --- push 前に既存の最新 CI run ID を記録 ---
 # rework サイクルで前サイクルの stale run を拾わないために、
