@@ -3,7 +3,7 @@
 #
 # executing ステートでのみ動作する。
 # task が worktree 内の場合（boid/<task_id[:8]> ブランチが存在）以下を実行:
-#   1. git push (git-cmd ホストコマンド経由でホスト上の worktree に対して実行)
+#   1. git push (builtin git で worktree ディレクトリに cd して実行)
 #   2. GitHub PR の作成（既存 PR がある場合はスキップ）
 #   3. GitHub Actions の完了を待機し、結果を verification として payload に出力
 #
@@ -54,22 +54,23 @@ diag "branch=${BRANCH}"
 diag "worktree_path=${WORKTREE_PATH}"
 
 # --- worktree 検出 ---
-# git-cmd は broker 経由でホスト上の /usr/bin/git を実行する。
-# broker はホスト上で動くため WORKTREE_PATH の FS にアクセスできる。
-REMOTE_URL=$(git-cmd -C "${WORKTREE_PATH}" remote get-url origin 2>/dev/null || true)
-diag "remote_url=${REMOTE_URL:-empty}"
-if [ -z "$REMOTE_URL" ]; then
+# .git ディレクトリの有無で worktree の存在を確認する（host_commands 不要）。
+if [ ! -d "${WORKTREE_PATH}/.git" ]; then
+    diag "worktree_not_found=true"
     echo "[pr-verify] worktree not found at ${WORKTREE_PATH}, skipping"
     exit 0
 fi
 
+# リモート URL を .git/config から直接読み取る（FS アクセス可能）。
+REMOTE_URL=$(sed -n 's/^[[:space:]]*url[[:space:]]*=[[:space:]]*//p' "${WORKTREE_PATH}/.git/config" 2>/dev/null | head -1 | tr -d '\n' || true)
+diag "remote_url=${REMOTE_URL:-empty}"
+
 # --- worktree HEAD と origin の状態を記録 ---
-LOCAL_HEAD=$(git-cmd -C "${WORKTREE_PATH}" rev-parse HEAD 2>/dev/null || echo "?")
-ORIGIN_HEAD=$(git-cmd -C "${WORKTREE_PATH}" rev-parse "origin/${BRANCH}" 2>/dev/null || echo "?")
+# rev-parse は localGitSubcommands に含まれており、builtin git shim を素通りして実行される。
+LOCAL_HEAD=$(cd "${WORKTREE_PATH}" && git rev-parse HEAD 2>/dev/null || echo "?")
+ORIGIN_HEAD=$(cd "${WORKTREE_PATH}" && git rev-parse "origin/${BRANCH}" 2>/dev/null || echo "?")
 diag "local_head=${LOCAL_HEAD}"
 diag "origin_head=${ORIGIN_HEAD}"
-COMMITS_AHEAD=$(git-cmd -C "${WORKTREE_PATH}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")
-diag "commits_ahead=${COMMITS_AHEAD}"
 
 # --- GitHub リポジトリ確認 ---
 if ! printf '%s' "$REMOTE_URL" | grep -q 'github\.com'; then
@@ -88,7 +89,7 @@ diag "prev_run_id=${PREV_RUN_ID:-none}"
 # --- git push ---
 echo "[pr-verify] git push origin ${BRANCH}"
 PUSH_EXIT=0
-PUSH_OUT=$(git-cmd -C "${WORKTREE_PATH}" push origin "${BRANCH}" 2>&1) || PUSH_EXIT=$?
+PUSH_OUT=$(cd "${WORKTREE_PATH}" && git push origin "${BRANCH}" 2>&1) || PUSH_EXIT=$?
 diag "push_exit=${PUSH_EXIT}"
 diag "push_out_first10=$(printf '%s' "$PUSH_OUT" | head -10 | tr '\n' '|')"
 
@@ -112,7 +113,7 @@ emit_findings() {
 if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing to push'; then
     echo "[pr-verify] branch already up-to-date on remote"
     diag "branch=up_to_date"
-    DIRTY=$(git-cmd -C "${WORKTREE_PATH}" status --porcelain 2>/dev/null || true)
+    DIRTY=$(cd "${WORKTREE_PATH}" && git status --porcelain 2>/dev/null || true)
     diag "dirty=$(printf '%s' "$DIRTY" | wc -l)_lines"
     if [ -n "$DIRTY" ]; then
         echo "[pr-verify] uncommitted changes detected in worktree"

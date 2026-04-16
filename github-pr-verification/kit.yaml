@@ -11,17 +11,6 @@ requires:
     - git
     - gh
 
-host_commands:
-  # git-cmd: ホスト上の git を worktree パス指定で実行するためのコマンド。
-  # broker はホスト上で実行するため、"-C <worktree_path>" でワークツリーの
-  # FS にアクセスできる。git builtin は gate の CWD（ProjectDir）外のパスを
-  # validateGitBuiltinCwd が弾くため、host_command として別名で定義している。
-  git-cmd:
-    path: /usr/bin/git
-    allow:
-      - "-C * push*"
-      - "-C * remote*"
-      - "-C * status*"
 env:
   # ワークツリーのルートディレクトリ。
   # ${HOME} はスペック読み込み時にホスト側の環境変数で展開される。
