@@ -1,0 +1,31 @@
+meta:
+  name: Git auto-merge (local)
+  description: ローカル git 操作のみで base branch にマージコミットを積む
+  category: workflow
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - flock
+    - python3
+
+builtin_commands:
+  - boid
+
+env:
+  BOID_BASE_BRANCH: ""
+
+hooks:
+  - id: mergeable-check
+    on: [verifying]
+    behavior: dev
+    traits:
+      produces: [verification]
+
+  - id: auto-merge
+    on: [done]
+    behavior: dev
+    traits:
+      produces: [artifact]
