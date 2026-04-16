@@ -12,9 +12,6 @@ requires:
     - gh
 
 env:
-  # ワークツリーのルートディレクトリ。
-  # ${HOME} はスペック読み込み時にホスト側の環境変数で展開される。
-  BOID_WORKTREE_ROOT: "${HOME}/.local/share/boid/worktrees"
   # push 後に GitHub Actions run を検索するリトライ回数（1 回 = 10 秒、デフォルト 12 = 2 分）。
   # CI が設定されていないリポジトリではこの時間だけ待機してから "no Actions" と判定する。
   BOID_PR_VERIFY_RUN_DETECT_RETRY: "12"

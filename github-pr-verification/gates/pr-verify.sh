@@ -2,8 +2,9 @@
 # github-pr-verification gate: pr-verify
 #
 # executing ステートでのみ動作する。
-# task が worktree 内の場合（boid/<task_id[:8]> ブランチが存在）以下を実行:
-#   1. git push (builtin git で worktree ディレクトリに cd して実行)
+# task が worktree モード（boid/<task_id[:8]> ブランチを push して PR を作成）の場合、
+# 以下を実行:
+#   1. git push (builtin git broker 経由で ProjectDir の git コンテキストから実行)
 #   2. GitHub PR の作成（既存 PR がある場合はスキップ）
 #   3. GitHub Actions の完了を待機し、結果を verification として payload に出力
 #
@@ -16,8 +17,8 @@
 #     - reworking でも gate が再発火するので CI 成功で done に向かう
 #
 # 環境変数:
-#   BOID_WORKTREE_ROOT   ワークツリーのルートディレクトリ（kit env で設定済み）
-#   BOID_PR_VERIFY_TIMEOUT  CI 待機の最大ループ回数（1 回 = 10 秒、デフォルト 180 = 30 分）
+#   BOID_PR_VERIFY_RUN_DETECT_RETRY  CI run 検出のリトライ回数（1 回 = 10 秒、デフォルト 12 = 2 分）
+#   BOID_PR_VERIFY_TIMEOUT           CI 待機の最大ループ回数（1 回 = 10 秒、デフォルト 180 = 30 分）
 
 set -euo pipefail
 
@@ -38,8 +39,6 @@ TASK_TITLE=$(printf '%s' "$TASK_JSON" | python3 -c "import sys,json; print(json.
 
 TASK_SHORT="${TASK_ID:0:8}"
 BRANCH="boid/${TASK_SHORT}"
-WORKTREE_ROOT="${BOID_WORKTREE_ROOT:-}"
-WORKTREE_PATH="${WORKTREE_ROOT}/${PROJECT_ID}/${TASK_SHORT}"
 
 echo "[pr-verify] task=${TASK_SHORT} branch=${BRANCH}"
 
@@ -51,24 +50,23 @@ diag() {
 }
 diag "task_short=${TASK_SHORT}"
 diag "branch=${BRANCH}"
-diag "worktree_path=${WORKTREE_PATH}"
 
-# --- worktree 検出 ---
-# .git ディレクトリの有無で worktree の存在を確認する（host_commands 不要）。
-if [ ! -d "${WORKTREE_PATH}/.git" ]; then
-    diag "worktree_not_found=true"
-    echo "[pr-verify] worktree not found at ${WORKTREE_PATH}, skipping"
+# --- リモート URL の取得（broker 経由の builtin git）---
+# gate はファイルシステムアクセスを持たないため、git shim を broker 経由で実行し
+# ProjectDir の .git/config からリモート URL を取得する。
+# `remote` は localGitSubcommands に含まれないため broker 経由でホスト実行される。
+REMOTE_URL=$(git remote get-url origin 2>/dev/null || true)
+diag "remote_url=${REMOTE_URL:-empty}"
+
+if [ -z "$REMOTE_URL" ]; then
+    echo "[pr-verify] no remote origin found, skipping"
     exit 0
 fi
 
-# リモート URL を .git/config から直接読み取る（FS アクセス可能）。
-REMOTE_URL=$(sed -n 's/^[[:space:]]*url[[:space:]]*=[[:space:]]*//p' "${WORKTREE_PATH}/.git/config" 2>/dev/null | head -1 | tr -d '\n' || true)
-diag "remote_url=${REMOTE_URL:-empty}"
-
-# --- worktree HEAD と origin の状態を記録 ---
-# rev-parse は localGitSubcommands に含まれており、builtin git shim を素通りして実行される。
-LOCAL_HEAD=$(cd "${WORKTREE_PATH}" && git rev-parse HEAD 2>/dev/null || echo "?")
-ORIGIN_HEAD=$(cd "${WORKTREE_PATH}" && git rev-parse "origin/${BRANCH}" 2>/dev/null || echo "?")
+# --- ブランチ状態を記録（broker 経由）---
+# show-ref / ls-remote は localGitSubcommands に含まれないため broker 経由でホスト実行される。
+LOCAL_HEAD=$(git show-ref --hash "refs/heads/${BRANCH}" 2>/dev/null || echo "?")
+ORIGIN_HEAD=$(git ls-remote origin "refs/heads/${BRANCH}" 2>/dev/null | awk '{print $1}' || echo "?")
 diag "local_head=${LOCAL_HEAD}"
 diag "origin_head=${ORIGIN_HEAD}"
 
@@ -89,7 +87,7 @@ diag "prev_run_id=${PREV_RUN_ID:-none}"
 # --- git push ---
 echo "[pr-verify] git push origin ${BRANCH}"
 PUSH_EXIT=0
-PUSH_OUT=$(cd "${WORKTREE_PATH}" && git push origin "${BRANCH}" 2>&1) || PUSH_EXIT=$?
+PUSH_OUT=$(git push origin "${BRANCH}" 2>&1) || PUSH_EXIT=$?
 diag "push_exit=${PUSH_EXIT}"
 diag "push_out_first10=$(printf '%s' "$PUSH_OUT" | head -10 | tr '\n' '|')"
 
@@ -113,12 +111,7 @@ emit_findings() {
 if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing to push'; then
     echo "[pr-verify] branch already up-to-date on remote"
     diag "branch=up_to_date"
-    DIRTY=$(cd "${WORKTREE_PATH}" && git status --porcelain 2>/dev/null || true)
-    diag "dirty=$(printf '%s' "$DIRTY" | wc -l)_lines"
-    if [ -n "$DIRTY" ]; then
-        echo "[pr-verify] uncommitted changes detected in worktree"
-        emit_findings "Uncommitted changes detected in worktree. Commit and push your changes before CI can verify them." "open"
-    elif [ -n "$PREV_RUN_ID" ]; then
+    if [ -n "$PREV_RUN_ID" ]; then
         # 新しいコミットはないが、前回の CI run がある場合はその結果を確認する
         echo "[pr-verify] checking previous CI run ${PREV_RUN_ID}"
         PREV_STATUS=$(gh run view "${PREV_RUN_ID}" \
