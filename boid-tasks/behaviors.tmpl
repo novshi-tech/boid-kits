@@ -2,6 +2,13 @@ dev:
   name: dev
   worktree: true
   traits: [instructions]
+  kits:
+    {{- range .FeatureKits }}
+    - {{ . }}
+    {{- end }}
+    - github.com/novshi-tech/boid-kits/github-pr-verification
+    - github.com/novshi-tech/boid-kits/github-auto-merge
+    - github.com/novshi-tech/boid-kits/{{ .Consumer }}
   default_payload:
     instructions:
       main:
@@ -22,6 +29,9 @@ plan:
   name: plan
   readonly: true
   traits: [instructions, tasks]
+  kits:
+    - github.com/novshi-tech/boid-kits/boid-tasks
+    - github.com/novshi-tech/boid-kits/{{ .Consumer }}
   default_payload:
     instructions:
       main:
@@ -59,6 +69,9 @@ auto_plan:
   name: auto_plan
   readonly: true
   traits: [instructions, tasks]
+  kits:
+    - github.com/novshi-tech/boid-kits/boid-tasks
+    - github.com/novshi-tech/boid-kits/{{ .Consumer }}
   default_payload:
     instructions:
       main:
