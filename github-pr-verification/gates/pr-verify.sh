@@ -36,11 +36,18 @@ TASK_JSON=$(cat)
 TASK_ID=$(printf '%s' "$TASK_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 PROJECT_ID=$(printf '%s' "$TASK_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['project_id'])")
 TASK_TITLE=$(printf '%s' "$TASK_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title','') or '')")
+WORKTREE=$(printf '%s' "$TASK_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('worktree') else 'false')")
 
 TASK_SHORT="${TASK_ID:0:8}"
 BRANCH="boid/${TASK_SHORT}"
 
-echo "[pr-verify] task=${TASK_SHORT} branch=${BRANCH}"
+echo "[pr-verify] task=${TASK_SHORT} branch=${BRANCH} worktree=${WORKTREE}"
+
+# worktree モードでなければスキップ（このgateはworktreeモードのタスク専用）
+if [ "$WORKTREE" != "true" ]; then
+    echo "[pr-verify] task is not in worktree mode, skipping"
+    exit 0
+fi
 
 # --- diagnostic 蓄積（findings に含めるためのバッファ）---
 # 各分岐で観測した状態を DIAG に追記し、最終的に findings の message に含める。
