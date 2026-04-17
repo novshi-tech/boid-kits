@@ -1,11 +1,6 @@
 {{.Consumer}}:
   command:
     - {{.Consumer}}
-  kits:
-    {{- range .FeatureKits }}
-    - {{ . }}
-    {{- end }}
-    - github.com/novshi-tech/boid-kits/{{.Consumer}}
 shell:
   command:
     - bash
