@@ -22,8 +22,11 @@ additional_bindings:
 
 hooks:
   - id: run-agent
-    on: executing
+    on: [executing, reworking]
     kind: agent
+    traits:
+      consumes: ["artifact?", "verification?"]
+      produces: [artifact, tasks]
     requires:
       - codex
       - python3
