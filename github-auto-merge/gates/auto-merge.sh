@@ -49,11 +49,11 @@ patch = {
     'payload_patch': {
         'artifact': {
             'auto-merge': {
+                'merged': True,
                 'pr': {
                     'number': int(os.environ['PR_NUMBER']),
                     'url': os.environ['PR_URL'],
                     'branch': os.environ['BRANCH'],
-                    'merged': True,
                 },
             },
         },
@@ -82,11 +82,11 @@ patch = {
     'payload_patch': {
         'artifact': {
             'auto-merge': {
+                'merged': True,
                 'pr': {
                     'number': int(os.environ['PR_NUMBER']),
                     'url': os.environ['PR_URL'],
                     'branch': os.environ['BRANCH'],
-                    'merged': True,
                 },
             },
         },
@@ -104,12 +104,12 @@ patch = {
     'payload_patch': {
         'artifact': {
             'auto-merge': {
+                'merged': False,
+                'error': 'late_conflict',
                 'pr': {
                     'number': int(os.environ['PR_NUMBER']),
                     'url': os.environ['PR_URL'],
                     'branch': os.environ['BRANCH'],
-                    'merged': False,
-                    'error': 'late_conflict',
                 },
             },
         },

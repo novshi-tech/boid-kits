@@ -53,7 +53,9 @@ import json
 print(json.dumps({
     'artifact': {
         'auto-merge': {
-            'pr': {'number': None, 'url': None, 'branch': '${BRANCH}', 'merged': False, 'error': None},
+            'merged': False,
+            'error': None,
+            'pr': {'number': None, 'url': None, 'branch': '${BRANCH}'},
         },
     },
 }))
@@ -114,12 +116,12 @@ branch = os.environ['BRANCH']
 print(json.dumps({
     'artifact': {
         'auto-merge': {
+            'merged': False,
+            'error': 'conflict',
             'pr': {
                 'number': pr_number,
                 'url': pr_url,
                 'branch': branch,
-                'merged': False,
-                'error': 'conflict',
             },
         },
     },
@@ -182,12 +184,12 @@ merge_status = os.environ.get('MERGE_STATUS', '')
 print(json.dumps({
     'artifact': {
         'auto-merge': {
+            'merged': merge_status in ('merged', 'already_merged'),
+            'error': merge_error,
             'pr': {
                 'number': pr_number,
                 'url': os.environ.get('PR_URL', ''),
                 'branch': os.environ.get('BRANCH', ''),
-                'merged': merge_status in ('merged', 'already_merged'),
-                'error': merge_error,
             },
         },
     },
