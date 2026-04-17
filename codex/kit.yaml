@@ -23,8 +23,7 @@ additional_bindings:
 hooks:
   - id: run-agent
     on: executing
-    traits:
-      consumes: [instructions]
+    kind: agent
     requires:
       - codex
       - python3
