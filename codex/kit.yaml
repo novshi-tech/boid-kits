@@ -13,6 +13,11 @@ requires:
 
 provides_consumer: codex
 
+commands:
+  codex:
+    command:
+      - codex
+
 additional_bindings:
   - source: ${HOME}/.volta
   - source: ${HOME}/.codex

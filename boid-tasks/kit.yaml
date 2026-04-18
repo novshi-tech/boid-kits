@@ -10,9 +10,6 @@ scaffold:
   task_behaviors:
     description: Default task behaviors (dev / plan / auto_plan)
     template: behaviors.tmpl
-  commands:
-    description: Default agent launcher commands (consumer / shell)
-    template: commands.tmpl
 
 gates:
   - id: create-subtasks
