@@ -1,47 +1,43 @@
 dev:
   name: dev
   worktree: true
-  traits: [instructions]
   kits:
     - github.com/novshi-tech/boid-kits/github-pr-verification
     - github.com/novshi-tech/boid-kits/github-auto-merge
-  default_payload:
-    instructions:
-      main:
-        type: execution
-        consumer: {{.Consumer}}
-        message: |
-          task.yaml の title と description に記述された内容を実装せよ。
-      rework:
-        type: rework
-        consumer: {{.Consumer}}
-        message: |
-          verification findings に記載された問題を修正せよ。
+  default_instructions:
+    main:
+      type: execution
+      consumer: {{.Consumer}}
+      message: |
+        task.yaml の title と description に記述された内容を実装せよ。
+    rework:
+      type: rework
+      consumer: {{.Consumer}}
+      message: |
+        verification findings に記載された問題を修正せよ。
 plan:
   name: plan
   readonly: true
-  traits: [instructions, tasks]
+  traits: [tasks]
   kits:
     - github.com/novshi-tech/boid-kits/boid-tasks
-  default_payload:
-    instructions:
-      main:
-        type: execution
-        consumer: {{.Consumer}}
-        interactive: true
-        message: |
-          task.yaml を読み、boid-plan skill に従ってユーザーと対話しながら実装計画を策定し、~/.boid/output/payload_patch.yaml に書き出せ。
+  default_instructions:
+    main:
+      type: execution
+      consumer: {{.Consumer}}
+      interactive: true
+      message: |
+        task.yaml を読み、boid-plan skill に従ってユーザーと対話しながら実装計画を策定し、~/.boid/output/payload_patch.yaml に書き出せ。
 auto_plan:
   name: auto_plan
   readonly: true
-  traits: [instructions, tasks]
+  traits: [tasks]
   kits:
     - github.com/novshi-tech/boid-kits/boid-tasks
-  default_payload:
-    instructions:
-      main:
-        type: execution
-        consumer: {{.Consumer}}
-        interactive: false
-        message: |
-          task.yaml を読み、boid-plan skill に従って実装計画を策定し、~/.boid/output/payload_patch.yaml に書き出せ。
+  default_instructions:
+    main:
+      type: execution
+      consumer: {{.Consumer}}
+      interactive: false
+      message: |
+        task.yaml を読み、boid-plan skill に従って実装計画を策定し、~/.boid/output/payload_patch.yaml に書き出せ。

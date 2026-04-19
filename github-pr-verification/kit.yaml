@@ -35,13 +35,11 @@ gates:
 #   task_behaviors:
 #     dev:
 #       worktree: true                  # ブランチ分離が必要
-#       traits: [instructions]
-#       default_payload:
-#         instructions:
-#           main:
-#             type: execution
-#             consumer: claude-code
-#             message: "実装が完了したら commit & push してください。"
+#       default_instructions:
+#         main:
+#           type: execution
+#           consumer: claude-code
+#           message: "実装が完了したら commit & push してください。"
 #
 # 統合 state machine での pr-verify gate の動作:
 #   - artifact 存在 かつ executing-state の verification findings がすべて resolved → done（verifying pass-through 経由）
