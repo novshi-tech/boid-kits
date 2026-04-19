@@ -22,8 +22,9 @@
 
 set -euo pipefail
 
-OUTPUT_DIR="/tmp/.boid/output"
+OUTPUT_DIR="${HOME}/.boid/output"
 PATCH_FILE="${OUTPUT_DIR}/payload_patch.yaml"
+mkdir -p "${OUTPUT_DIR}"
 
 # NOTE: exec 1>&2 は削除済み。
 # stdout は /tmp/boid-output にキャプチャされ job output に残るため、
