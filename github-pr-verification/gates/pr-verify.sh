@@ -59,12 +59,12 @@ diag() {
 diag "task_short=${TASK_SHORT}"
 diag "branch=${BRANCH}"
 
-# --- ブランチ状態を記録（broker 経由）---
-# show-ref / ls-remote は localGitSubcommands に含まれないため broker 経由でホスト実行される。
+# --- ブランチ状態を記録 (診断用) ---
+# show-ref はローカル repo メタデータだけ参照するので boid の sandbox でも
+# ローカル実行できる。ls-remote はネットワーク接続が必要で broker 経由の
+# git builtin (push/fetch 相当) が未対応なので、ここでは記録しない。
 LOCAL_HEAD=$(git show-ref --hash "refs/heads/${BRANCH}" 2>/dev/null || echo "?")
-ORIGIN_HEAD=$(git ls-remote origin "refs/heads/${BRANCH}" 2>/dev/null | awk '{print $1}' || echo "?")
 diag "local_head=${LOCAL_HEAD}"
-diag "origin_head=${ORIGIN_HEAD}"
 
 # --- push 前に既存の最新 CI run ID を記録 ---
 # rework サイクルで前サイクルの stale run を拾わないために、
@@ -97,12 +97,17 @@ emit_findings() {
     } > "${PATCH_FILE}"
 }
 
-# push が up-to-date の場合: 新しいコミットが push されていない
+# push が up-to-date の場合: 新しいコミットが push されていない。
+# 意味は PREV_RUN_ID の有無で変わる:
+#   - PREV_RUN_ID あり  → rework cycle (前回 CI が存在する) で新規 commit なし
+#     = rework agent が仕事していない。そのまま finding open で reworking 継続。
+#   - PREV_RUN_ID なし  → 初回 cycle、または前回 cycle が PR 作成前に失敗した復旧中。
+#     branch が既に remote にある (= abort→rerun で既存 remote を拾った等) だけ
+#     なので、PR 作成フローへ合流して CI を走らせる。
 if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing to push'; then
     echo "[pr-verify] branch already up-to-date on remote"
     diag "branch=up_to_date"
     if [ -n "$PREV_RUN_ID" ]; then
-        # 新しいコミットはないが、前回の CI run がある場合はその結果を確認する
         echo "[pr-verify] checking previous CI run ${PREV_RUN_ID}"
         PREV_STATUS=$(gh run view "${PREV_RUN_ID}" \
             --json status,conclusion \
@@ -120,11 +125,10 @@ if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing
             echo "[pr-verify] previous CI run not successful (status=${PREV_RUN_STATUS}, conclusion=${PREV_CONCLUSION})"
             emit_findings "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes." "open"
         fi
-    else
-        echo "[pr-verify] no new commits and no previous CI run"
-        emit_findings "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes." "open"
+        exit 0
     fi
-    exit 0
+    echo "[pr-verify] no previous CI run; fall through to PR creation"
+    # fall through — PR を作って最新 run を監視する
 fi
 
 # push が失敗した場合（up-to-date 以外の失敗）
