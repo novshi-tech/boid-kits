@@ -1,19 +1,30 @@
 id: boid-kits
 name: boid-kits
 
+kits:
+  - github.com/novshi-tech/boid-kits/claude-code
+  - github.com/novshi-tech/boid-kits/codex
+  - github.com/novshi-tech/boid-kits/github-cli
 task_behaviors:
   dev:
-    name: development
-    transition: one-shot
+    name: Development
+    worktree: true
     kits:
-      - github.com/novshi-tech/boid-kits/git
-      - github.com/novshi-tech/boid-kits/claude-code
-      - github.com/novshi-tech/boid-kits/codex
+      - github.com/novshi-tech/boid-kits/github-pr-verification
+      - github.com/novshi-tech/boid-kits/github-auto-merge
     default_instructions:
       main:
         type: execution
         consumer: claude-code
-        message: "タスクを実装してください。完了したらコミットしてください."
+        model: sonnet
+        message: |
+          task.yaml の title と description に記述された内容を実装せよ。
+      rework:
+        type: rework
+        consumer: claude-code
+        model: sonnet
+        message: |
+          verification findings に記載された問題を修正せよ。
 
   plan:
     name: Plan
@@ -21,7 +32,6 @@ task_behaviors:
     traits: [tasks]
     kits:
       - github.com/novshi-tech/boid-kits/boid-tasks
-      - github.com/novshi-tech/boid-kits/claude-code
     default_instructions:
       main:
         type: execution
