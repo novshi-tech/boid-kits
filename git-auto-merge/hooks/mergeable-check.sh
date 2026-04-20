@@ -10,9 +10,55 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../scripts/lib.sh
-. "${SCRIPT_DIR}/../scripts/lib.sh"
+# detect_base_branch <task_branch>
+#
+# stdout に base branch 名を出力する。
+# 1. BOID_BASE_BRANCH env が設定されていればそれを使う。
+# 2. 未設定なら git worktree list --porcelain の最初のエントリの branch を採用。
+#    ただし task 自身の branch (引数) と一致する場合はスキップして次のエントリを見る。
+# 3. 検出できない場合は stderr にエラーを出し、exit 1。
+#
+# NOTE: 本来は scripts/lib.sh に分離していたが、boid の kit ステージング
+# (internal/orchestrator/kit_stage.go) がサブディレクトリを持ち込まないため
+# 暫定で inline 化している。kit 全体を bind-mount する改修後に再分離予定。
+detect_base_branch() {
+    local task_branch="$1"
+
+    if [ -n "${BOID_BASE_BRANCH:-}" ]; then
+        printf '%s\n' "${BOID_BASE_BRANCH}"
+        return 0
+    fi
+
+    local worktree_list
+    worktree_list=$(git worktree list --porcelain 2>/dev/null || true)
+    if [ -z "${worktree_list}" ]; then
+        echo "[git-auto-merge/lib] ERROR: git worktree list failed" >&2
+        return 1
+    fi
+
+    local base
+    base=$(printf '%s\n' "${worktree_list}" | awk -v task="${task_branch}" '
+        BEGIN { RS = ""; FS = "\n" }
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ /^branch refs\/heads\//) {
+                    name = substr($i, length("branch refs/heads/") + 1)
+                    if (name != task) {
+                        print name
+                        exit
+                    }
+                }
+            }
+        }
+    ')
+
+    if [ -z "${base}" ]; then
+        echo "[git-auto-merge/lib] ERROR: could not detect base branch from worktree list" >&2
+        return 1
+    fi
+
+    printf '%s\n' "${base}"
+}
 
 # stdin を読み捨て (PayloadJSON は未使用)
 cat >/dev/null || true
