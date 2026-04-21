@@ -17,6 +17,7 @@ commands:
   codex:
     command:
       - codex
+      - --dangerously-bypass-approvals-and-sandbox
 
 additional_bindings:
   - source: ${HOME}/.volta
