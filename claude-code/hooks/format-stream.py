@@ -145,12 +145,12 @@ def main():
             output = process_line(line)
             if output is not None:
                 if not first:
-                    print()
-                print(output)
+                    print(file=sys.stderr)
+                print(output, file=sys.stderr)
                 first = False
         except Exception as e:
             print(f"[error] {e}", file=sys.stderr)
-            print(f"[error] {truncate(line.strip())}")
+            print(f"[error] {truncate(line.strip())}", file=sys.stderr)
 
 
 if __name__ == "__main__":
