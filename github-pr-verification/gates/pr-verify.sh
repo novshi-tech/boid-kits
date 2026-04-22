@@ -85,11 +85,15 @@ diag "push_out_first10=$(printf '%s' "$PUSH_OUT" | head -10 | tr '\n' '|')"
 emit_findings() {
     local msg="$1"
     local status="$2"
+    local severity="${3:-}"
     {
         printf 'payload_patch:\n'
         printf '  verification:\n'
         printf '    findings:\n'
         printf '      - status: %s\n' "$status"
+        if [ -n "$severity" ]; then
+            printf '        severity: %s\n' "$severity"
+        fi
         printf '        message: |\n'
         printf '          %s\n' "$msg"
         printf '          DIAGNOSTIC:\n'
@@ -123,7 +127,10 @@ if printf '%s' "$PUSH_OUT" | grep -qiE 'up-to-date|everything up-to-date|nothing
             emit_findings "GitHub Actions passed (${PR_URL:-no PR})" "resolved"
         else
             echo "[pr-verify] previous CI run not successful (status=${PREV_RUN_STATUS}, conclusion=${PREV_CONCLUSION})"
-            emit_findings "No new commits were added since the last rework cycle. The rework must produce at least one new commit with changes." "open"
+            emit_findings \
+                "Agent made no new commits since the last rework cycle. The rework must produce at least one new commit with changes. Task will be aborted." \
+                "open" \
+                "fatal"
         fi
         exit 0
     fi
