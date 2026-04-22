@@ -1,0 +1,21 @@
+meta:
+  name: Python (uv)
+  description: uv (Astral 製 Python パッケージ/バージョンマネージャ) をサンドボックスにマウントする
+  category: language
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - uv
+
+additional_bindings:
+  - source: ${HOME}/.cache/uv
+    mode: rw
+    optional: true
+  - source: ${HOME}/.local/share/uv
+    mode: rw
+    optional: true
+  - source: ${HOME}/.config/uv
+    optional: true
