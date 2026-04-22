@@ -29,8 +29,9 @@ additional_bindings:
   - source: ${HOME}/.claude.json
     mode: rw
   - source: ${HOME}/.local/share/boid/skills/boid-sandbox
-    mode: rw
-
+    target: ${HOME}/.claude/skills/boid-sandbox
+  - source: ${HOME}/.local/share/boid/skills/boid-plan
+    target: ${HOME}/.claude/skills/boid-plan
 hooks:
   - id: run-agent
     on: [executing, reworking]
