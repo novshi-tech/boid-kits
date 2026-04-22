@@ -9,6 +9,7 @@ detect:
 requires:
   commands:
     - codex
+    - node
     - python3
 
 provides_consumer: codex
@@ -20,7 +21,6 @@ commands:
       - --dangerously-bypass-approvals-and-sandbox
 
 additional_bindings:
-  - source: ${HOME}/.volta
   - source: ${HOME}/.codex
     mode: rw
   - source: ${HOME}/.local/share/boid/skills/boid-sandbox
