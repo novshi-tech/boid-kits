@@ -43,6 +43,25 @@ RESULT=$(git-cmd -C "${WORKTREE_PATH}" rev-parse HEAD)
 
 `push` は `RoleGate` のポリシーで許可されている。`rev-parse` / `status` は `localGitSubcommands` に含まれており shim を素通りして `/usr/bin/git` が実行される。詳細は `internal/orchestrator/builtin_policy.go` および `internal/sandbox/git_shim.go` を参照。
 
+## rework サイクルでの無 commit abort
+
+rework サイクル（`reworking` ステート）で agent が新しいコミットを作らずに終了した場合、`pr-verify` gate は `severity=fatal` の open finding を出力する。
+
+```yaml
+findings:
+  - status: open
+    severity: fatal
+    message: |
+      Agent made no new commits since the last rework cycle.
+      The rework must produce at least one new commit with changes. Task will be aborted.
+```
+
+StateMachine は `severity=fatal` の open finding を検出すると即座に `aborted` に遷移する（reworking ループを継続しない）。
+
+**ルール**: agent は rework 指示に対して必ず 1 commit 以上作る必要がある。
+
+**復帰方法**: abort されたタスクは `boid task gate replay <task> <gate>` で再実行できる（`gate-replay-core` / `gate-replay-tui` 実装後）。
+
 ## 環境変数
 
 | 変数 | 説明 | デフォルト |
