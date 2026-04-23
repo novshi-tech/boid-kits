@@ -27,7 +27,7 @@ plan:
       consumer: {{.Consumer}}
       interactive: true
       message: |
-        task.yaml を読み、boid-plan skill に従ってユーザーと対話しながら実装計画を策定し、~/.boid/output/payload_patch.yaml に書き出せ。
+        /boid-plan skill に従って実装計画を策定せよ。
 auto_plan:
   name: auto_plan
   readonly: true
@@ -40,4 +40,5 @@ auto_plan:
       consumer: {{.Consumer}}
       interactive: false
       message: |
-        task.yaml を読み、boid-plan skill に従って実装計画を策定し、~/.boid/output/payload_patch.yaml に書き出せ。
+        /boid-plan skill に従って実装計画を策定せよ。
+        作成したタスクは auto_start: true に設定して自動実行すること。
