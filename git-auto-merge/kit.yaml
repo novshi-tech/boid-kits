@@ -17,15 +17,15 @@ builtin_commands:
 env:
   BOID_BASE_BRANCH: ""
 
-hooks:
+gates:
   - id: mergeable-check
     on: [verifying]
-    behavior: dev
+    phase: exit
     traits:
       produces: [verification]
 
   - id: auto-merge
     on: [done]
-    behavior: dev
+    phase: entry
     traits:
       produces: [artifact]

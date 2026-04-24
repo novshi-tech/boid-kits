@@ -33,9 +33,9 @@ self-hosted の純 git リポジトリでそのまま使える。
 GitHub リポジトリで本 kit を明示的に有効化したいときにセットする
 （detect.sh の分岐を参照）。
 
-## Hooks
+## Gates
 
-### mergeable-check (on: verifying)
+### mergeable-check (on: verifying, phase: exit)
 
 `git merge-tree $BASE $TASK_BRANCH` で base branch との conflict を dry-run 検出する。
 
@@ -43,7 +43,7 @@ GitHub リポジトリで本 kit を明示的に有効化したいときにセ�
   reworking に戻す
 - conflict なし: `verification.findings` を空にクリア
 
-### auto-merge (on: done)
+### auto-merge (on: done, phase: entry)
 
 `flock` で排他ロックを取り、`/tmp` に detached worktree を作って `--no-ff` マージ
 コミットを作成する。`git update-ref` で base branch を atomic に進める。

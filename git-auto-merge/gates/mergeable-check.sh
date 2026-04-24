@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mergeable-check hook (on: verifying)
+# mergeable-check gate (on: verifying, phase: exit)
 #
 # git merge-tree で base branch との conflict を dry-run 検出する。
 # - conflict あり: verification.findings に open finding を出力 (→ reworking)

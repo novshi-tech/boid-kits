@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# auto-merge hook (on: done)
+# auto-merge gate (on: done, phase: entry)
 #
 # done 入場時に flock で排他ロックを取り、detached worktree を /tmp に作って
 # --no-ff マージコミットを作成、update-ref で base branch を atomic に更新する。
