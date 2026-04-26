@@ -45,11 +45,23 @@ GitHub リポジトリで本 kit を明示的に有効化したいときにセ�
 
 ### auto-merge (on: done, phase: entry)
 
-`flock` で排他ロックを取り、`/tmp` に detached worktree を作って `--no-ff` マージ
-コミットを作成する。`git update-ref` で base branch を atomic に進める。
+`flock` で排他ロックを取り、**BASE branch が checked out されている worktree
+で直接** `git merge --no-ff` を実行する。HEAD / index / working tree が一括で
+前進するので、`update-ref` で別 worktree のブランチ ref だけ動かす旧設計が
+原因の「同名ブランチを開いている worktree が古いまま取り残される desync」は
+発生しない。
 
 並列タスクが同時に done に到達してもマージは直列化されるので、マージコミットの
 連鎖は保証される。
+
+事前条件を満たさない場合は merge を行わず fail-fast し、`artifact.error` に
+理由を載せて reworking に戻す:
+
+| `error` | 条件 |
+|---------|------|
+| `base_not_checked_out` | `BASE` (= `BOID_BASE_BRANCH` or プライマリ worktree のブランチ) がどの worktree にも checkout されていない |
+| `primary_busy` | 対象 worktree に未コミット変更がある / merge / rebase / cherry-pick / revert / `git am` のいずれかが進行中 |
+| `late_conflict` | 実マージで衝突した（`mergeable-check` の dry-run をすり抜けた稀ケース） |
 
 出力 artifact:
 
@@ -60,7 +72,7 @@ artifact:
     base_branch: main
     merge_commit: <sha>     # 成功時のみ
     task_branch: boid/abcd1234
-    error: late_conflict    # 失敗時のみ
+    error: base_not_checked_out | primary_busy | late_conflict   # 失敗時のみ
 ```
 
 ## `github-auto-merge` との違い
