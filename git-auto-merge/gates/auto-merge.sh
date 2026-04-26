@@ -13,6 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../scripts/lib.sh
 source "${SCRIPT_DIR}/../scripts/lib.sh"
 
+# host gate なので cwd は dispatcher が WorktreeRoot に設定済み。後段の
+# cleanup_worktree が `cd /` するため、戻る先を保持しておく。
+WORKTREE_ROOT="$(pwd)"
+
 # stdin を読み捨て (PayloadJSON は未使用)
 cat >/dev/null || true
 
@@ -94,8 +98,9 @@ fi
 MERGE_SHA=$(git -C "${MERGE_DIR}" rev-parse HEAD)
 echo "[auto-merge] merge commit: ${MERGE_SHA}" >&2
 
-# --- worktree を掃除 ---
+# --- worktree を掃除 (cleanup_worktree は cd / するので元の dir に戻す) ---
 cleanup_worktree
+cd "${WORKTREE_ROOT}"
 
 # --- base branch ref を atomic に更新 ---
 # update-ref は「ブランチが別 worktree でチェックアウト済み」でも成功する。
