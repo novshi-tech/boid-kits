@@ -57,6 +57,8 @@ def main():
             spec["depends_on_payload"] = task["depends_on_payload"]
         if task.get("auto_start"):
             spec["auto_start"] = task["auto_start"]
+        if task.get("base_branch"):
+            spec["base_branch"] = task["base_branch"]
 
         result = subprocess.run(
             ["boid", "task", "create"],
