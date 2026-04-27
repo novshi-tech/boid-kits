@@ -5,7 +5,7 @@
 # mergeable-check gate (verifying exit gate) で conflict が解消済みであることが前提。
 #
 # stdin: TaskJSON
-# stdout: payload_patch (YAML)
+# stdout: payload_patch (JSON)
 
 set -euo pipefail
 
@@ -43,7 +43,7 @@ if [ "${PR_STATE}" = "MERGED" ]; then
     echo "[auto-merge] PR already merged" >&2
     export PR_NUMBER PR_URL BRANCH
     python3 -c "
-import os, yaml
+import os, json
 
 patch = {
     'payload_patch': {
@@ -59,7 +59,7 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 "
     exit 0
 fi
@@ -76,7 +76,7 @@ if [ "${MERGE_EXIT}" -eq 0 ]; then
     echo "[auto-merge] PR merged successfully" >&2
     export PR_NUMBER PR_URL BRANCH
     python3 -c "
-import os, yaml
+import os, json
 
 patch = {
     'payload_patch': {
@@ -92,13 +92,13 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 "
 else
     echo "[auto-merge] ERROR: merge failed (exit=${MERGE_EXIT}): ${MERGE_STDERR}" >&2
     export PR_NUMBER PR_URL BRANCH MERGE_STDERR
     python3 -c "
-import os, yaml
+import os, json
 
 patch = {
     'payload_patch': {
@@ -115,6 +115,6 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 "
 fi

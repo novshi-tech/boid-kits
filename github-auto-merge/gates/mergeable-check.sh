@@ -6,7 +6,7 @@
 # MERGEABLE/UNKNOWN では自身の subkey を空で更新する。
 #
 # stdin: TaskJSON
-# stdout: payload_patch (YAML)
+# stdout: payload_patch (JSON)
 
 set -euo pipefail
 
@@ -64,7 +64,7 @@ if [ "${MERGEABLE}" = "CONFLICTING" ]; then
 
     export PR_NUMBER PR_URL BRANCH
     python3 -c "
-import os, yaml
+import os, json
 
 pr_number = int(os.environ['PR_NUMBER'])
 pr_url = os.environ['PR_URL']
@@ -91,7 +91,7 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 "
     exit 0
 fi
@@ -100,7 +100,7 @@ fi
 echo "[mergeable-check] PR #${PR_NUMBER} mergeable=${MERGEABLE}, clearing findings" >&2
 
 python3 -c "
-import yaml
+import json
 
 patch = {
     'payload_patch': {
@@ -109,5 +109,5 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 "

@@ -8,8 +8,6 @@ import sys
 import uuid
 from pathlib import Path
 
-import yaml
-
 
 def get_sessions(payload):
     if not isinstance(payload, dict):
@@ -61,7 +59,7 @@ def build_payload_patch(sessions):
 
 
 def merge_sessions_into_patch(existing, sessions):
-    # agent が書いた payload_patch.yaml を保持したまま sessions だけ差し替える。
+    # agent が書いた payload_patch.json を保持したまま sessions だけ差し替える。
     # 上書きすると plan agent が書いた tasks: などが失われる。
     if not isinstance(existing, dict):
         existing = {}
@@ -85,21 +83,23 @@ def write_payload_patch(sessions, output_dir=None):
     if output_dir is None:
         output_dir = str(Path.home() / ".boid" / "output")
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "payload_patch.yaml")
+    # JSON 形式に統一: agent ファイルの round-trip で YAML 1.1 implicit type 変換
+    # (on:→true: 等) が起きるのを根本的に防ぐ。JSON のキーは仕様上 string 固定。
+    output_path = os.path.join(output_dir, "payload_patch.json")
 
     existing = {}
     if os.path.exists(output_path):
         try:
             with open(output_path) as f:
-                loaded = yaml.safe_load(f)
+                loaded = json.load(f)
             if isinstance(loaded, dict):
                 existing = loaded
-        except (yaml.YAMLError, OSError):
+        except (json.JSONDecodeError, OSError):
             existing = {}
 
     merged = merge_sessions_into_patch(existing, sessions)
     with open(output_path, "w") as f:
-        yaml.safe_dump(merged, f, sort_keys=False, allow_unicode=True)
+        json.dump(merged, f, ensure_ascii=False, indent=2)
 
 
 def read_payload_from_file(path):

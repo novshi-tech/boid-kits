@@ -5,7 +5,7 @@
 # --no-ff マージコミットを作成、update-ref で base branch を atomic に更新する。
 #
 # stdin: PayloadJSON (このスクリプトでは使わない)
-# stdout: payload_patch (YAML)
+# stdout: payload_patch (JSON)
 
 set -euo pipefail
 
@@ -75,7 +75,7 @@ if [ "${MERGE_EXIT}" -ne 0 ]; then
     cleanup_worktree
     export BASE TASK_BRANCH
     python3 - <<'PYEOF'
-import os, yaml
+import os, json
 
 patch = {
     'payload_patch': {
@@ -89,7 +89,7 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 PYEOF
     exit 0
 fi
@@ -114,7 +114,7 @@ echo "[auto-merge] updated refs/heads/${BASE} -> ${MERGE_SHA}" >&2
 # --- artifact 出力 ---
 export BASE TASK_BRANCH MERGE_SHA
 python3 - <<'PYEOF'
-import os, yaml
+import os, json
 
 patch = {
     'payload_patch': {
@@ -128,5 +128,5 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 PYEOF

@@ -11,27 +11,22 @@ rework サイクルで agent が新しいコミットを作らなかった場合
 3. **pr-verify gate**: push が up-to-date かつ `PREV_RUN_ID` が存在するため、前回 CI 結果を確認。前回 CI が成功していないので `severity=fatal` の open finding を出力
 4. **StateMachine**: fatal finding を検出して `aborted` に遷移
 
-## 期待する payload_patch.yaml
+## 期待する payload_patch.json
 
-```yaml
-payload_patch:
-  verification:
-    findings:
-      - status: open
-        severity: fatal
-        message: |
-          Agent made no new commits since the last rework cycle.
-          The rework must produce at least one new commit with changes. Task will be aborted.
-          DIAGNOSTIC:
-            task_short=<task_short>
-            branch=boid/<task_short>
-            local_head=<sha>
-            prev_run_id=<run_id>
-            push_exit=0
-            push_out_first10=...|Everything up-to-date|...
-            branch=up_to_date
-            prev_run_status=completed
-            prev_conclusion=failure
+```json
+{
+  "payload_patch": {
+    "verification": {
+      "findings": [
+        {
+          "status": "open",
+          "severity": "fatal",
+          "message": "Agent made no new commits since the last rework cycle.\nThe rework must produce at least one new commit with changes. Task will be aborted.\nDIAGNOSTIC:\n  task_short=<task_short>\n  branch=boid/<task_short>\n  local_head=<sha>\n  prev_run_id=<run_id>\n  push_exit=0\n  push_out_first10=...|Everything up-to-date|...\n  branch=up_to_date\n  prev_run_status=completed\n  prev_conclusion=failure"
+        }
+      ]
+    }
+  }
+}
 ```
 
 ## 検証アサーション

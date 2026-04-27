@@ -23,13 +23,13 @@
 set -euo pipefail
 
 OUTPUT_DIR="${HOME}/.boid/output"
-PATCH_FILE="${OUTPUT_DIR}/payload_patch.yaml"
+PATCH_FILE="${OUTPUT_DIR}/payload_patch.json"
 mkdir -p "${OUTPUT_DIR}"
 
 # NOTE: exec 1>&2 は削除済み。
 # stdout は /tmp/boid-output にキャプチャされ job output に残るため、
 # gate の動作ログが常に可視化される。
-# payload_patch.yaml が存在する場合は EXIT trap がそちらを優先するため
+# payload_patch.json が存在する場合は EXIT trap がそちらを優先するため
 # verification findings の保存には影響しない。
 
 # --- task 情報取得 ---
@@ -248,13 +248,21 @@ fi
 
 # --- verification findings 出力 ---
 if [ "$CONCLUSION" = "success" ]; then
-    cat > "${PATCH_FILE}" <<-EOF
-payload_patch:
-  verification:
-    findings:
-      - message: "GitHub Actions passed (${PR_URL})"
-        status: resolved
-EOF
+    export PR_URL
+    python3 - <<'PYEOF' > "${PATCH_FILE}"
+import json, os
+patch = {
+    'payload_patch': {
+        'verification': {
+            'findings': [{
+                'message': f"GitHub Actions passed ({os.environ['PR_URL']})",
+                'status': 'resolved',
+            }],
+        },
+    },
+}
+print(json.dumps(patch, ensure_ascii=False))
+PYEOF
 else
     # 失敗したジョブ名 + 失敗ステップ名を収集
     FAILED_JOBS=$(gh run view "${RUN_ID}" --json jobs \
@@ -269,10 +277,10 @@ else
     gh run view "${RUN_ID}" --log-failed 2>/dev/null | tail -n 100 > "${FAILED_LOG_FILE}" || true
     echo "[pr-verify] collected $(wc -l < "${FAILED_LOG_FILE}") log lines"
 
-    # Python で YAML を安全に生成（multiline メッセージのエスケープ対策）
+    # Python で JSON を安全に生成（multiline メッセージのエスケープ対策）
     export FAILED_JOBS PR_URL CONCLUSION FAILED_LOG_FILE
     python3 - <<'PYEOF' > "${PATCH_FILE}"
-import os
+import json, os
 
 failed_jobs = os.environ.get('FAILED_JOBS', 'unknown')
 pr_url = os.environ.get('PR_URL', '')
@@ -293,20 +301,14 @@ if failed_log:
 
 message = "\n".join(parts)
 
-try:
-    import yaml
-    data = {
-        'payload_patch': {
-            'verification': {
-                'findings': [{'message': message, 'status': 'open'}]
-            }
+data = {
+    'payload_patch': {
+        'verification': {
+            'findings': [{'message': message, 'status': 'open'}]
         }
     }
-    print(yaml.dump(data, default_flow_style=False, allow_unicode=True))
-except ImportError:
-    # PyYAML がない場合: 改行を \n にエスケープして quoted string として出力
-    escaped = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-    print(f'payload_patch:\n  verification:\n    findings:\n      - message: "{escaped}"\n        status: open')
+}
+print(json.dumps(data, ensure_ascii=False))
 PYEOF
     rm -f "${FAILED_LOG_FILE}"
 fi
