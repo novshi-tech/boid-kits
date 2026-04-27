@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../scripts/lib.sh
 source "${SCRIPT_DIR}/../scripts/lib.sh"
 
-# host gate なので cwd は dispatcher が WorktreeRoot に設定済み。後段の
+# dispatcher が cwd を WorktreeRoot に設定する。後段の
 # cleanup_worktree が `cd /` するため、戻る先を保持しておく。
 WORKTREE_ROOT="$(pwd)"
 

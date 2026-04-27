@@ -21,13 +21,11 @@ gates:
   - id: mergeable-check
     on: [verifying]
     phase: exit
-    host: true
     traits:
       produces: [verification]
 
   - id: auto-merge
     on: [done]
     phase: entry
-    host: true
     traits:
       produces: [artifact]
