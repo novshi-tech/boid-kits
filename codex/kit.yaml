@@ -28,7 +28,7 @@ additional_bindings:
 
 hooks:
   - id: run-agent
-    on: [executing, reworking]
+    on: [executing, reworking, verifying]
     kind: agent
     traits:
       consumes: ["artifact?", "verification?"]
