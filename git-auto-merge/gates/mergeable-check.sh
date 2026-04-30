@@ -6,7 +6,7 @@
 # - conflict なし: findings を空にクリア
 #
 # stdin: PayloadJSON (このスクリプトでは使わない)
-# stdout: payload_patch (YAML)
+# stdout: payload_patch (JSON)
 
 set -euo pipefail
 
@@ -49,7 +49,7 @@ if [ "${MERGE_TREE_EXIT}" -eq 1 ]; then
     echo "[mergeable-check] conflict detected with base branch ${BASE}" >&2
     export BASE
     python3 - <<'PYEOF'
-import os, yaml
+import os, json
 
 base = os.environ['BASE']
 message = (
@@ -70,7 +70,7 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 PYEOF
     exit 0
 fi
@@ -78,7 +78,7 @@ fi
 # --- conflict なし: findings を空にクリア ---
 echo "[mergeable-check] no conflicts with base branch ${BASE}" >&2
 python3 - <<'PYEOF'
-import yaml
+import json
 
 patch = {
     'payload_patch': {
@@ -87,5 +87,5 @@ patch = {
         },
     },
 }
-print(yaml.dump(patch, default_flow_style=False, allow_unicode=True))
+print(json.dumps(patch, ensure_ascii=False))
 PYEOF

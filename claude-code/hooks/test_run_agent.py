@@ -8,8 +8,6 @@ import sys
 import tempfile
 import unittest
 
-import yaml
-
 _spec = importlib.util.spec_from_file_location(
     "run_agent",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "run-agent.py"),
@@ -162,16 +160,16 @@ class TestBuildPayloadPatch(unittest.TestCase):
 
 
 class TestWritePayloadPatch(unittest.TestCase):
-    def test_writes_valid_yaml(self):
+    def test_writes_valid_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sessions = [{"type": "executor", "name": "", "id": "test-id"}]
             run_agent.write_payload_patch(sessions, output_dir=tmpdir)
 
-            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            output_path = os.path.join(tmpdir, "payload_patch.json")
             self.assertTrue(os.path.exists(output_path))
 
             with open(output_path) as f:
-                data = yaml.safe_load(f)
+                data = json.load(f)
 
             self.assertIn("payload_patch", data)
             self.assertEqual(
@@ -184,12 +182,12 @@ class TestWritePayloadPatch(unittest.TestCase):
             nested = os.path.join(tmpdir, "nested", "dir")
             sessions = [{"type": "executor", "name": "", "id": "test-id"}]
             run_agent.write_payload_patch(sessions, output_dir=nested)
-            self.assertTrue(os.path.exists(os.path.join(nested, "payload_patch.yaml")))
+            self.assertTrue(os.path.exists(os.path.join(nested, "payload_patch.json")))
 
     def test_preserves_agent_written_tasks(self):
         # plan agent が書いた payload_patch.tasks を hook が上書きで失わないこと。
         with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            output_path = os.path.join(tmpdir, "payload_patch.json")
             agent_written = {
                 "payload_patch": {
                     "tasks": [
@@ -210,13 +208,13 @@ class TestWritePayloadPatch(unittest.TestCase):
                 }
             }
             with open(output_path, "w") as f:
-                yaml.safe_dump(agent_written, f)
+                json.dump(agent_written, f)
 
             sessions = [{"type": "executor", "name": "", "id": "new-id"}]
             run_agent.write_payload_patch(sessions, output_dir=tmpdir)
 
             with open(output_path) as f:
-                data = yaml.safe_load(f)
+                data = json.load(f)
 
             self.assertEqual(
                 data["payload_patch"]["tasks"][0]["title"], "child task"
@@ -228,9 +226,9 @@ class TestWritePayloadPatch(unittest.TestCase):
 
     def test_preserves_other_artifact_keys(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            output_path = os.path.join(tmpdir, "payload_patch.json")
             with open(output_path, "w") as f:
-                yaml.safe_dump(
+                json.dump(
                     {
                         "payload_patch": {
                             "artifact": {
@@ -247,7 +245,7 @@ class TestWritePayloadPatch(unittest.TestCase):
             )
 
             with open(output_path) as f:
-                data = yaml.safe_load(f)
+                data = json.load(f)
 
             self.assertEqual(
                 data["payload_patch"]["artifact"]["custom_key"], {"foo": "bar"}
@@ -255,15 +253,15 @@ class TestWritePayloadPatch(unittest.TestCase):
 
     def test_corrupt_existing_falls_back_to_overwrite(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "payload_patch.yaml")
+            output_path = os.path.join(tmpdir, "payload_patch.json")
             with open(output_path, "w") as f:
-                f.write("\t\tnot: valid: yaml: ::\n")
+                f.write("\t\tnot: valid: json: ::\n")
 
             sessions = [{"type": "executor", "name": "", "id": "x"}]
             run_agent.write_payload_patch(sessions, output_dir=tmpdir)
 
             with open(output_path) as f:
-                data = yaml.safe_load(f)
+                data = json.load(f)
             self.assertEqual(
                 data["payload_patch"]["artifact"]["claude_code"]["sessions"],
                 sessions,
