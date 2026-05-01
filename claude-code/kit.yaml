@@ -37,4 +37,4 @@ hooks:
     kind: agent
     traits:
       consumes: ["artifact?"]
-      produces: [artifact, tasks]
+      produces: [artifact]

@@ -184,20 +184,14 @@ class TestWritePayloadPatch(unittest.TestCase):
             run_agent.write_payload_patch(sessions, output_dir=nested)
             self.assertTrue(os.path.exists(os.path.join(nested, "payload_patch.json")))
 
-    def test_preserves_agent_written_tasks(self):
-        # plan agent が書いた payload_patch.tasks を hook が上書きで失わないこと。
+    def test_preserves_other_top_level_keys(self):
+        # agent が書いた payload_patch の他の top-level キーを hook が上書きで失わないこと。
+        # boid 本体の trait は drop されるが、 merge ロジックは agent 入力を尊重する。
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "payload_patch.json")
             agent_written = {
                 "payload_patch": {
-                    "tasks": [
-                        {
-                            "title": "child task",
-                            "ref": "task-a",
-                            "behavior": "dev",
-                            "description": "do the thing",
-                        }
-                    ],
+                    "extra_metadata": {"note": "preserved by merge"},
                     "artifact": {
                         "claude_code": {
                             "sessions": [
@@ -217,7 +211,7 @@ class TestWritePayloadPatch(unittest.TestCase):
                 data = json.load(f)
 
             self.assertEqual(
-                data["payload_patch"]["tasks"][0]["title"], "child task"
+                data["payload_patch"]["extra_metadata"], {"note": "preserved by merge"}
             )
             self.assertEqual(
                 data["payload_patch"]["artifact"]["claude_code"]["sessions"],

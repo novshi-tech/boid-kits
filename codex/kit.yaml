@@ -31,7 +31,7 @@ hooks:
     kind: agent
     traits:
       consumes: ["artifact?"]
-      produces: [artifact, tasks]
+      produces: [artifact]
     requires:
       - codex
       - python3
