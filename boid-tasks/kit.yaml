@@ -10,9 +10,3 @@ scaffold:
   task_behaviors:
     description: Default task behaviors (dev / plan / auto_plan)
     template: behaviors.tmpl
-
-gates:
-  - id: create-subtasks
-    phase: entry
-    traits:
-      consumes: [tasks]
