@@ -4,41 +4,33 @@ dev:
   kits:
     - github.com/novshi-tech/boid-kits/github-pr-verification
     - github.com/novshi-tech/boid-kits/github-auto-merge
-  default_instructions:
-    main:
-      type: execution
-      consumer: {{.Consumer}}
-      message: |
-        task.yaml の title と description に記述された内容を実装せよ。
-    rework:
-      type: rework
-      consumer: {{.Consumer}}
-      message: |
-        verification findings に記載された問題を修正せよ。
+  default_instruction:
+    type: execution
+    consumer: {{.Consumer}}
+    message: |
+      task.yaml の title と description に記述された内容を実装せよ。
 plan:
   name: plan
   readonly: true
   traits: [tasks]
   kits:
     - github.com/novshi-tech/boid-kits/boid-tasks
-  default_instructions:
-    main:
-      type: execution
-      consumer: {{.Consumer}}
-      interactive: true
-      message: |
-        /boid-plan skill に従って実装計画を策定せよ。
+  default_instruction:
+    type: execution
+    consumer: {{.Consumer}}
+    interactive: true
+    message: |
+      /boid-plan skill に従って実装計画を策定せよ。
 auto_plan:
   name: auto_plan
   readonly: true
   traits: [tasks]
   kits:
     - github.com/novshi-tech/boid-kits/boid-tasks
-  default_instructions:
-    main:
-      type: execution
-      consumer: {{.Consumer}}
-      interactive: false
-      message: |
-        /boid-plan skill に従って実装計画を策定せよ。
-        作成したタスクは auto_start: true に設定して自動実行すること。
+  default_instruction:
+    type: execution
+    consumer: {{.Consumer}}
+    interactive: false
+    message: |
+      /boid-plan skill に従って実装計画を策定せよ。
+      作成したタスクは auto_start: true に設定して自動実行すること。
