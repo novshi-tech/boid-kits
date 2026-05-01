@@ -28,10 +28,9 @@ additional_bindings:
 
 hooks:
   - id: run-agent
-    on: [executing, reworking, verifying]
     kind: agent
     traits:
-      consumes: ["artifact?", "verification?"]
+      consumes: ["artifact?"]
       produces: [artifact, tasks]
     requires:
       - codex

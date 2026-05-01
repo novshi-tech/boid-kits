@@ -18,14 +18,7 @@ env:
   BOID_MERGE_POLL_INTERVAL: "10"
 
 gates:
-  - id: mergeable-check
-    on: [verifying]
-    phase: exit
-    traits:
-      produces: [verification]
-
   - id: auto-merge
-    on: [done]
-    phase: entry
+    phase: exit
     traits:
       produces: [artifact]

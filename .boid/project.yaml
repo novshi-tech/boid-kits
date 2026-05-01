@@ -10,7 +10,6 @@ task_behaviors:
     name: Development
     worktree: true
     kits:
-      - github.com/novshi-tech/boid-kits/github-pr-verification
       - github.com/novshi-tech/boid-kits/github-auto-merge
     default_instructions:
       main:
@@ -19,12 +18,6 @@ task_behaviors:
         model: sonnet
         message: |
           task.yaml の title と description に記述された内容を実装せよ。
-      rework:
-        type: rework
-        consumer: claude-code
-        model: sonnet
-        message: |
-          verification findings に記載された問題を修正せよ。
 
   plan:
     name: Plan

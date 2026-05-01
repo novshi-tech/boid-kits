@@ -13,7 +13,6 @@ scaffold:
 
 gates:
   - id: create-subtasks
-    on: [done]
     phase: entry
     traits:
       consumes: [tasks]
