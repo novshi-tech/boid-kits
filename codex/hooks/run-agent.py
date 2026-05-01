@@ -63,8 +63,8 @@ def build_payload_patch(sessions):
 
 
 def merge_sessions_into_patch(existing, sessions):
-    # agent が書いた payload_patch.json を保持したまま sessions だけ差し替える。
-    # 上書きすると plan agent が書いた tasks: などが失われる。
+    # agent が書いた payload_patch.json の他のキーを保持したまま sessions だけ差し替える。
+    # 上書きすると agent が書いた他の artifact 子キーや top-level エントリが失われる。
     if not isinstance(existing, dict):
         existing = {}
     patch = existing.setdefault("payload_patch", {})

@@ -21,7 +21,6 @@ task_behaviors:
   plan:
     name: Plan
     readonly: true
-    traits: [tasks]
     kits:
       - github.com/novshi-tech/boid-kits/boid-tasks
     default_instruction:
@@ -31,29 +30,21 @@ task_behaviors:
       interactive: true
       message: |
         task.yaml の title と description に記述されたテーマについて、ユーザーと対話しながら実装計画を策定せよ。
-        タスクが大きい場合は適切な粒度に分解すること。確定後に ~/.boid/output/payload_patch.json に以下の形式 (JSON) で書き出すこと：
+        タスクが大きい場合は適切な粒度に分解すること。
 
-        {
-          "payload_patch": {
-            "tasks": [
-              {
-                "title": "タスクのタイトル",
-                "ref": "task-a",
-                "behavior": "実行モデル名（例: dev）",
-                "description": "このタスクを実行するエージェントへの指示。何を・どのように実装するかを詳細に記述する。"
-              },
-              {
-                "title": "次のタスク",
-                "ref": "task-b",
-                "behavior": "dev",
-                "description": "...",
-                "depends_on": ["task-a"],
-                "depends_on_payload": "artifact.auto-merge.merged",
-                "auto_start": true
-              }
-            ]
-          }
-        }
+        確定したサブタスクは `boid task create` builtin を直接呼び出して登録する (詳細は /boid-plan skill 参照):
+
+        ```bash
+        boid task create <<YAML
+        title: タスクのタイトル
+        ref: task-a
+        behavior: dev
+        parent_id: ${BOID_TASK_ID}
+        description: |
+          このタスクを実行するエージェントへの指示。
+          何を / どのように実装するかを詳細に記述する。
+        YAML
+        ```
 
         ## 依存タスク
 
