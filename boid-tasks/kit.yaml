@@ -8,5 +8,5 @@ detect:
 
 scaffold:
   task_behaviors:
-    description: Default task behaviors (dev / plan / auto_plan)
+    description: Default task behaviors (dev / plan)
     template: behaviors.tmpl

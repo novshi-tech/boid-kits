@@ -19,16 +19,4 @@ plan:
     consumer: {{.Consumer}}
     interactive: true
     message: |
-      /boid-plan skill に従って実装計画を策定せよ。
-auto_plan:
-  name: auto_plan
-  readonly: true
-  kits:
-    - github.com/novshi-tech/boid-kits/boid-tasks
-  default_instruction:
-    type: execution
-    consumer: {{.Consumer}}
-    interactive: false
-    message: |
-      /boid-plan skill に従って実装計画を策定せよ。
-      作成したタスクは auto_start: true に設定して自動実行すること。
+      /boid-plan skill に従って実装せよ。
