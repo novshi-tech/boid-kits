@@ -10,7 +10,7 @@ requires:
   commands:
     - claude
 
-provides_consumer: claude-code
+provides_agent: claude-code
 
 commands:
   claude:

@@ -12,7 +12,7 @@ requires:
     - node
     - python3
 
-provides_consumer: codex
+provides_agent: codex
 
 commands:
   codex:
