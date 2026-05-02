@@ -13,6 +13,7 @@ requires:
 additional_bindings:
   - source: ${HOME}/.local/share/go
   - source: ${HOME}/go
+    mode: rw
 
 env:
   GOPATH: ${HOME}/go
