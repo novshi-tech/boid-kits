@@ -20,8 +20,19 @@ data = json.load(sys.stdin)
 print(data.get('id', ''))
 " 2>/dev/null || true)
 
-BRANCH="boid/${TASK_ID:0:8}"
-echo "[auto-merge] task=${TASK_ID} branch=${BRANCH}" >&2
+# PR を探すブランチ名は worktree の現在 HEAD を優先する。
+# task description で agent に独自ブランチ名 (例: feature/...) への切替を
+# 指示するケースがあり、 task ID 由来の boid/<id8> 決め打ちでは
+# `no_pr` で誤 abort する。 detached HEAD や resolve 失敗時は
+# 旧来の boid/<id8> にフォールバックする。
+LEGACY_BRANCH="boid/${TASK_ID:0:8}"
+WORKTREE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+if [ -z "${WORKTREE_BRANCH}" ] || [ "${WORKTREE_BRANCH}" = "HEAD" ]; then
+    BRANCH="${LEGACY_BRANCH}"
+else
+    BRANCH="${WORKTREE_BRANCH}"
+fi
+echo "[auto-merge] task=${TASK_ID} branch=${BRANCH} (legacy=${LEGACY_BRANCH})" >&2
 
 emit_artifact() {
     # emit_artifact <merged: true|false> [error]
@@ -48,10 +59,25 @@ PYEOF
 }
 
 # --- PR の存在確認 ---
-PR_INFO=$(gh pr list --head "${BRANCH}" --state all \
-    --json number,url,state \
-    --jq '[.[] | select(.state == "OPEN" or .state == "MERGED")] | sort_by(.state == "OPEN" | not) | .[0]' \
-    2>/dev/null || echo "")
+lookup_pr() {
+    # lookup_pr <branch>
+    gh pr list --head "$1" --state all \
+        --json number,url,state \
+        --jq '[.[] | select(.state == "OPEN" or .state == "MERGED")] | sort_by(.state == "OPEN" | not) | .[0]' \
+        2>/dev/null || echo ""
+}
+
+PR_INFO=$(lookup_pr "${BRANCH}")
+
+# worktree branch で見つからず、 legacy (boid/<id8>) と異なる場合は legacy も試す
+if { [ -z "${PR_INFO}" ] || [ "${PR_INFO}" = "null" ]; } && [ "${BRANCH}" != "${LEGACY_BRANCH}" ]; then
+    echo "[auto-merge] no PR for ${BRANCH}; falling back to ${LEGACY_BRANCH}" >&2
+    FALLBACK_INFO=$(lookup_pr "${LEGACY_BRANCH}")
+    if [ -n "${FALLBACK_INFO}" ] && [ "${FALLBACK_INFO}" != "null" ]; then
+        PR_INFO="${FALLBACK_INFO}"
+        BRANCH="${LEGACY_BRANCH}"
+    fi
+fi
 
 if [ -z "${PR_INFO}" ] || [ "${PR_INFO}" = "null" ]; then
     echo "[auto-merge] no PR found for branch ${BRANCH}" >&2
