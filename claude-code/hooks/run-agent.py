@@ -10,8 +10,8 @@ from pathlib import Path
 
 # Prompt injected as system prompt addendum to instruct the agent on pausing behavior.
 _PAUSE_SYSTEM_PROMPT = (
-    "ユーザに質問や確認が必要になった場合は、以下の手順を踏むこと: "
-    "まず Bash で `boid task notify \"$BOID_TASK_ID\" --message \"<コンテキストと質問>\"` を実行し、"
+    "ユーザに質問や確認が必要になった場合は、以下の手順を踏むこと (詳細は /boid-q-and-a skill 参照): "
+    "まず Bash で `boid task notify \"$BOID_TASK_ID\" --message \"<コンテキスト>\" --ask \"<質問>\"` を実行し、"
     "その後、何もせず \"paused\" とだけ出力して終了せよ。"
 )
 
@@ -126,12 +126,26 @@ def read_payload_from_string(data):
         return {}
 
 
-def ensure_skills_symlink():
-    skills_src = Path.home() / ".local" / "share" / "boid" / "skills" / "boid-sandbox"
-    skills_link = Path.home() / ".claude" / "skills" / "boid-sandbox"
-    if not skills_link.exists() and not skills_link.is_symlink():
-        skills_link.parent.mkdir(parents=True, exist_ok=True)
-        skills_link.symlink_to(skills_src)
+def ensure_skills_symlinks():
+    claude_skills_dir = Path.home() / ".claude" / "skills"
+    claude_skills_dir.mkdir(parents=True, exist_ok=True)
+
+    # boid-sandbox fallback: boid daemon deploys this to ~/.local/share/boid/skills/
+    # when it runs; create a symlink here in case additional_bindings didn't apply.
+    boid_sandbox_link = claude_skills_dir / "boid-sandbox"
+    if not boid_sandbox_link.exists() and not boid_sandbox_link.is_symlink():
+        boid_skills_src = Path.home() / ".local" / "share" / "boid" / "skills" / "boid-sandbox"
+        boid_sandbox_link.symlink_to(boid_skills_src)
+
+    # Kit-provided skills: auto-link every directory under <kit_root>/skills/.
+    kit_root = Path(__file__).resolve().parent.parent
+    kit_skills_dir = kit_root / "skills"
+    if kit_skills_dir.is_dir():
+        for skill_dir in sorted(kit_skills_dir.iterdir()):
+            if skill_dir.is_dir():
+                skill_link = claude_skills_dir / skill_dir.name
+                if not skill_link.exists() and not skill_link.is_symlink():
+                    skill_link.symlink_to(skill_dir)
 
 
 def run_non_interactive(args, prompt, format_stream):
@@ -176,7 +190,7 @@ def run_non_interactive(args, prompt, format_stream):
 
 
 def main():
-    ensure_skills_symlink()
+    ensure_skills_symlinks()
 
     interactive = os.environ.get("BOID_INTERACTIVE") == "1"
     model = os.environ.get("BOID_MODEL", "")
