@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code agent runner with artifact-based session management."""
+"""Claude Code agent runner with C2 (claude --print + resume) based session management."""
 
 import json
 import os
@@ -7,6 +7,13 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+
+# Prompt injected as system prompt addendum to instruct the agent on pausing behavior.
+_PAUSE_SYSTEM_PROMPT = (
+    "ユーザに質問や確認が必要になった場合は、以下の手順を踏むこと: "
+    "まず Bash で `boid task notify \"$BOID_TASK_ID\" --message \"<コンテキストと質問>\"` を実行し、"
+    "その後、何もせず \"paused\" とだけ出力して終了せよ。"
+)
 
 
 def get_sessions(payload):
@@ -127,6 +134,47 @@ def ensure_skills_symlink():
         skills_link.symlink_to(skills_src)
 
 
+def run_non_interactive(args, prompt, format_stream):
+    """Run claude in non-interactive (print) mode.
+
+    Streams output through format-stream.py for display and collects the
+    final result event to detect the 'paused' sentinel.
+
+    Returns (exit_code, result_event_or_None).
+    """
+    full_args = ["setsid", "-w"] + args + ["-p", prompt]
+
+    claude_proc = subprocess.Popen(
+        full_args,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    format_proc = subprocess.Popen(
+        ["python3", format_stream],
+        stdin=subprocess.PIPE,
+    )
+
+    result_event = None
+    for raw_line in claude_proc.stdout:
+        try:
+            format_proc.stdin.write(raw_line)
+            format_proc.stdin.flush()
+        except BrokenPipeError:
+            pass
+        try:
+            event = json.loads(raw_line.decode("utf-8", errors="replace"))
+            if event.get("type") == "result":
+                result_event = event
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+
+    format_proc.stdin.close()
+    format_proc.wait()
+    exit_code = claude_proc.wait()
+    return exit_code, result_event
+
+
 def main():
     ensure_skills_symlink()
 
@@ -135,20 +183,30 @@ def main():
     invoked_type = os.environ.get("BOID_INVOKED_TYPE", "executor")
     invoked_name = os.environ.get("BOID_INVOKED_NAME", "")
 
+    # B3 env vars: set by boid daemon when re-spawning after user answer (awaiting → executing).
+    b3_session_id = os.environ.get("BOID_AGENT_SESSION_ID", "")
+    b3_user_answer = os.environ.get("BOID_USER_ANSWER", "")
+
     if interactive:
         payload_path = str(Path.home() / ".boid" / "context" / "payload.json")
         payload = read_payload_from_file(payload_path)
     else:
         payload = read_payload_from_string(sys.stdin.read())
 
-    sessions = get_sessions(payload)
-    session_id, is_resume = resolve_session(sessions, invoked_type, invoked_name)
+    # Determine session ID and whether this is a resume.
+    if b3_session_id:
+        # B3 mode: boid daemon injects session ID from previous run.
+        session_id = b3_session_id
+        is_resume = True
+    else:
+        # Payload-based session management (fallback / non-B3 flow).
+        sessions = get_sessions(payload)
+        session_id, is_resume = resolve_session(sessions, invoked_type, invoked_name)
 
-    args = ["claude", "--dangerously-skip-permissions"]
+    args = ["claude", "--permission-mode", "bypassPermissions"]
     if is_resume:
         args.extend(["--resume", session_id])
-    else:
-        args.extend(["--session-id", session_id])
+    args.extend(["--session-id", session_id])
     if model:
         args.extend(["--model", model])
 
@@ -157,27 +215,47 @@ def main():
         result = subprocess.run(args)
         exit_code = result.returncode
     else:
-        args.extend(["--verbose", "--output-format=stream-json", "-p", "/boid-sandbox"])
+        args.extend([
+            "--append-system-prompt", _PAUSE_SYSTEM_PROMPT,
+            "--output-format", "stream-json",
+            "--verbose",
+        ])
+
         script_path = Path(__file__).resolve()
         prefix = script_path.name.split("--", 1)[0] + "--" if "--" in script_path.name else ""
         format_stream = str(script_path.parent / f"{prefix}format-stream.py")
 
-        claude_proc = subprocess.Popen(
-            ["setsid", "-w"] + args,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        format_proc = subprocess.Popen(
-            ["python3", format_stream],
-            stdin=claude_proc.stdout,
-        )
-        claude_proc.stdout.close()
-        format_proc.wait()
-        exit_code = claude_proc.wait()
+        # Determine the prompt: user answer for B3 resume, skill invocation for initial run.
+        prompt = b3_user_answer if b3_user_answer else "/boid-sandbox"
 
-    updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
-    write_payload_patch(updated_sessions)
+        exit_code, result_event = run_non_interactive(args, prompt, format_stream)
+
+        if exit_code != 0:
+            print(
+                f"[run-agent] claude exited with code {exit_code}",
+                file=sys.stderr,
+            )
+        elif result_event is None:
+            print(
+                "[run-agent] WARNING: no result event found in output",
+                file=sys.stderr,
+            )
+        else:
+            result_text = result_event.get("result", "")
+            if result_text == "paused":
+                # Agent self-paused via boid task notify; task transitions to awaiting.
+                # Write session to payload so B3 can provide it as BOID_AGENT_SESSION_ID.
+                if not b3_session_id:
+                    sessions = get_sessions(payload)
+                    updated = update_sessions(sessions, invoked_type, invoked_name, session_id)
+                    write_payload_patch(updated)
+                sys.exit(0)
+
+    # Persist session for subsequent runs (payload-based mode only).
+    if not b3_session_id:
+        sessions = get_sessions(payload)
+        updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
+        write_payload_patch(updated_sessions)
 
     sys.exit(exit_code)
 
