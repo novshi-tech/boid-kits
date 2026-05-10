@@ -25,6 +25,8 @@ additional_bindings:
     mode: rw
   - source: ${HOME}/.local/share/boid/skills/boid-sandbox
     mode: rw
+  - source: ${HOME}/.local/share/boid/skills/boid-discuss
+    mode: rw
 
 hooks:
   - id: run-agent

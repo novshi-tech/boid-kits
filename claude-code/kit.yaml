@@ -32,6 +32,8 @@ additional_bindings:
     target: ${HOME}/.claude/skills/boid-sandbox
   - source: ${HOME}/.local/share/boid/skills/boid-plan
     target: ${HOME}/.claude/skills/boid-plan
+  - source: ${HOME}/.local/share/boid/skills/boid-discuss
+    target: ${HOME}/.claude/skills/boid-discuss
 hooks:
   - id: run-agent
     kind: agent
