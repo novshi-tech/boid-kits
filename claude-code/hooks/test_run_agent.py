@@ -371,7 +371,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
         else:
             session_id, is_resume = run_agent.resolve_session(sessions, "executor", "")
 
-        prompt = b3_user_answer if b3_user_answer else "/boid-sandbox"
+        prompt = run_agent.select_prompt(is_resume, b3_user_answer)
         return session_id, is_resume, prompt
 
     def test_b3_mode_uses_env_session_id(self):
@@ -384,7 +384,9 @@ class TestB3EnvVarHandling(unittest.TestCase):
         self.assertTrue(is_resume)
         self.assertEqual(prompt, "yes, go ahead")
 
-    def test_b3_mode_empty_user_answer_falls_back_to_skill(self):
+    def test_b3_mode_empty_user_answer_uses_resume_prompt(self):
+        # reopen 等、 answer なし resume では state-changed prompt に落ちる。
+        # /boid-sandbox を再投入すると履歴を信じて即終了する症状の対策。
         session_id, is_resume, prompt = self._resolve(
             b3_session_id="b3-uuid-1234",
             b3_user_answer="",
@@ -392,7 +394,8 @@ class TestB3EnvVarHandling(unittest.TestCase):
         )
         self.assertEqual(session_id, "b3-uuid-1234")
         self.assertTrue(is_resume)
-        self.assertEqual(prompt, "/boid-sandbox")
+        self.assertEqual(prompt, run_agent._RESUME_PROMPT)
+        self.assertNotEqual(prompt, "/boid-sandbox")
 
     def test_non_b3_mode_uses_payload_session(self):
         sessions = [{"type": "executor", "name": "", "id": "payload-id"}]
@@ -403,7 +406,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
         )
         self.assertEqual(session_id, "payload-id")
         self.assertTrue(is_resume)
-        self.assertEqual(prompt, "/boid-sandbox")
+        self.assertEqual(prompt, run_agent._RESUME_PROMPT)
 
     def test_non_b3_initial_run_generates_new_session(self):
         session_id, is_resume, prompt = self._resolve(
@@ -415,6 +418,24 @@ class TestB3EnvVarHandling(unittest.TestCase):
         import uuid as _uuid
         _uuid.UUID(session_id)  # must be a valid UUID
         self.assertEqual(prompt, "/boid-sandbox")
+
+
+class TestSelectPrompt(unittest.TestCase):
+    def test_fresh_returns_skill_slash_command(self):
+        self.assertEqual(run_agent.select_prompt(False, ""), "/boid-sandbox")
+
+    def test_resume_without_answer_returns_resume_prompt(self):
+        prompt = run_agent.select_prompt(True, "")
+        self.assertEqual(prompt, run_agent._RESUME_PROMPT)
+        self.assertIn("BOID_USER_ANSWER", prompt)
+        self.assertIn("instructions.yaml", prompt)
+
+    def test_resume_with_answer_returns_answer(self):
+        self.assertEqual(run_agent.select_prompt(True, "approved"), "approved")
+
+    def test_answer_takes_precedence_when_not_resume(self):
+        # is_resume=False でも user_answer があれば優先 (defensive)
+        self.assertEqual(run_agent.select_prompt(False, "ans"), "ans")
 
 
 class TestPausedDetection(unittest.TestCase):
