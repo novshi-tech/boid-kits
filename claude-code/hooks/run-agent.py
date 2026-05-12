@@ -240,7 +240,8 @@ def main():
     args = ["claude", "--permission-mode", "bypassPermissions"]
     if is_resume:
         args.extend(["--resume", session_id])
-    args.extend(["--session-id", session_id])
+    else:
+        args.extend(["--session-id", session_id])
     if model:
         args.extend(["--model", model])
 
