@@ -15,6 +15,26 @@ _PAUSE_SYSTEM_PROMPT = (
     "その後、何もせず \"paused\" とだけ出力して終了せよ。"
 )
 
+# Resume without a user answer (e.g. reopen with a new instruction): the prior
+# /boid-sandbox skill expansion is already in history, so re-injecting it is
+# noise. Claude binary's implicit "Continue from where you left off." biases
+# the agent toward "no new work" when prior context shows a completed task.
+# This prompt counteracts that by signalling state has changed and pointing
+# the agent at the context files it should re-read.
+_RESUME_PROMPT = (
+    "状態が更新されました。 BOID_USER_ANSWER 環境変数 (Q&A 回答があれば設定されている) "
+    "と ~/.boid/context/ 以下のファイル (task.yaml, instructions.yaml, payload.yaml) を"
+    "確認し、 新しい状況に対応してください。"
+)
+
+
+def select_prompt(is_resume, user_answer):
+    if user_answer:
+        return user_answer
+    if is_resume:
+        return _RESUME_PROMPT
+    return "/boid-sandbox"
+
 
 def get_sessions(payload):
     if not isinstance(payload, dict):
@@ -239,8 +259,7 @@ def main():
         prefix = script_path.name.split("--", 1)[0] + "--" if "--" in script_path.name else ""
         format_stream = str(script_path.parent / f"{prefix}format-stream.py")
 
-        # Determine the prompt: user answer for B3 resume, skill invocation for initial run.
-        prompt = b3_user_answer if b3_user_answer else "/boid-sandbox"
+        prompt = select_prompt(is_resume, b3_user_answer)
 
         exit_code, result_event = run_non_interactive(args, prompt, format_stream)
 
