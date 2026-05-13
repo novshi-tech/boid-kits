@@ -1,14 +1,15 @@
 id: dad1961a-9ef9-495d-858f-e27e75d9afca
 name: boid-kits
 
+worktree: true
+
 kits:
   - github.com/novshi-tech/boid-kits/claude-code
   - github.com/novshi-tech/boid-kits/codex
   - github.com/novshi-tech/boid-kits/github-cli
 task_behaviors:
-  dev:
+  executor:
     name: Development
-    worktree: true
     kits:
       - github.com/novshi-tech/boid-kits/github-auto-merge
     default_instruction:
@@ -16,48 +17,17 @@ task_behaviors:
       agent: claude-code
       model: sonnet
       message: |
-        task.yaml の title と description に記述された内容を実装せよ。
-
-  plan:
+        /boid-executor skill に従って task.yaml の title と
+        description に記述された内容を実装せよ。 完了したら
+        /dev-pr-flow があればそれを、 無ければ commit + push で終了する。
+  supervisor:
     name: Plan
-    readonly: true
-    kits:
-      - github.com/novshi-tech/boid-kits/boid-tasks
     default_instruction:
       type: execution
       agent: claude-code
       model: opus
-      interactive: true
       message: |
-        task.yaml の title と description に記述されたテーマについて、ユーザーと対話しながら実装計画を策定せよ。
-        タスクが大きい場合は適切な粒度に分解すること。
-
-        確定したサブタスクは `boid task create` builtin を直接呼び出して登録する (詳細は /boid-plan skill 参照):
-
-        ```bash
-        boid task create <<YAML
-        title: タスクのタイトル
-        ref: task-a
-        behavior: dev
-        parent_id: ${BOID_TASK_ID}
-        description: |
-          このタスクを実行するエージェントへの指示。
-          何を / どのように実装するかを詳細に記述する。
-        YAML
-        ```
-
-        ## 依存タスク
-
-        タスク間に順序依存がある場合、後続タスクに以下を設定すること：
-        - ref: タスクに任意の名前を付ける。同一バッチ内で depends_on から参照される。
-        - depends_on: 依存先タスクの ref 名を指定する。
-        - depends_on_payload: "artifact.auto-merge.merged" — 依存先タスクの PR が auto-merge で正常にマージされるまで待機する。
-        - auto_start: true — 依存条件が満たされたら自動的に開始する。
-
-        順序依存がないタスクには depends_on を設定しないこと（並列実行される）。
-
-        ## boid-kits の更新
-
-        boid-kits（キットパッケージ群）の更新を伴うタスクは、`project_id: boid-kits` を明示的に設定すること。
-        設定しない場合、親タスクのプロジェクト（このリポジトリ = boid）にタスクが作成されてしまい、
-        boid-kits リポジトリへの変更として実行されない。
+        /boid-supervisor skill に従って実装計画を構築し子 executor
+        タスクを作成・監視せよ。 child の PR は github-auto-merge kit に
+        より main にマージされるので、 マージ完了後に pull して
+        子タスクの成果を検証してから次へ。

@@ -1,6 +1,5 @@
-dev:
-  name: dev
-  worktree: true
+executor:
+  name: executor
   kits:
     - github.com/novshi-tech/boid-kits/github-pr-verification
     - github.com/novshi-tech/boid-kits/github-auto-merge
@@ -8,10 +7,12 @@ dev:
     type: execution
     consumer: {{.Consumer}}
     message: |
-      task.yaml の title と description に記述された内容を実装せよ。
-plan:
-  name: plan
-  readonly: true
+      /boid-executor skill に従って task.yaml の title と
+      description に記述された内容を実装せよ。 実装が完了したら
+      プロジェクト側のリリーススキル (例: /dev-pr-flow) があれば
+      それを呼ぶ。 無ければローカルで commit + push して終了する。
+supervisor:
+  name: supervisor
   kits:
     - github.com/novshi-tech/boid-kits/boid-tasks
   default_instruction:
@@ -19,4 +20,4 @@ plan:
     consumer: {{.Consumer}}
     interactive: true
     message: |
-      /boid-plan skill に従って実装せよ。
+      /boid-supervisor skill に従って子タスクを作成して監視せよ。
