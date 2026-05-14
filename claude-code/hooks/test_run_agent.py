@@ -350,7 +350,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
     session / prompt を決定するロジックを単体で検証する。
     """
 
-    def _resolve(self, b3_session_id, b3_user_answer, sessions):
+    def _resolve(self, b3_session_id, b3_user_answer, sessions, invoked_type="executor"):
         """B3 env var がある場合の session / prompt 決定ロジックを再現する。"""
         if b3_session_id:
             session_id = b3_session_id
@@ -358,7 +358,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
         else:
             session_id, is_resume = run_agent.resolve_session(sessions, "executor", "")
 
-        prompt = run_agent.select_prompt(is_resume, b3_user_answer)
+        prompt = run_agent.select_prompt(is_resume, b3_user_answer, invoked_type)
         return session_id, is_resume, prompt
 
     def test_b3_mode_uses_env_session_id(self):
@@ -396,20 +396,32 @@ class TestB3EnvVarHandling(unittest.TestCase):
         self.assertEqual(prompt, run_agent._RESUME_PROMPT)
 
     def test_non_b3_initial_run_generates_new_session(self):
-        session_id, is_resume, prompt = self._resolve(
-            b3_session_id="",
-            b3_user_answer="",
-            sessions=[],
-        )
-        self.assertFalse(is_resume)
         import uuid as _uuid
-        _uuid.UUID(session_id)  # must be a valid UUID
-        self.assertEqual(prompt, "/boid-sandbox")
+        for invoked_type, expected_prompt in [
+            ("supervisor", "/boid-supervisor"),
+            ("executor", "/boid-executor"),
+        ]:
+            with self.subTest(invoked_type=invoked_type):
+                session_id, is_resume, prompt = self._resolve(
+                    b3_session_id="",
+                    b3_user_answer="",
+                    sessions=[],
+                    invoked_type=invoked_type,
+                )
+                self.assertFalse(is_resume)
+                _uuid.UUID(session_id)  # must be a valid UUID
+                self.assertEqual(prompt, expected_prompt)
 
 
 class TestSelectPrompt(unittest.TestCase):
-    def test_fresh_returns_skill_slash_command(self):
-        self.assertEqual(run_agent.select_prompt(False, ""), "/boid-sandbox")
+    def test_fresh_supervisor_returns_boid_supervisor(self):
+        self.assertEqual(run_agent.select_prompt(False, "", "supervisor"), "/boid-supervisor")
+
+    def test_fresh_executor_returns_boid_executor(self):
+        self.assertEqual(run_agent.select_prompt(False, "", "executor"), "/boid-executor")
+
+    def test_fresh_unknown_returns_boid_sandbox(self):
+        self.assertEqual(run_agent.select_prompt(False, "", "unknown-behavior"), "/boid-sandbox")
 
     def test_resume_without_answer_returns_resume_prompt(self):
         prompt = run_agent.select_prompt(True, "")
