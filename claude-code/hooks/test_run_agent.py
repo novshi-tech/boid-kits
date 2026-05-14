@@ -437,5 +437,115 @@ class TestSelectPrompt(unittest.TestCase):
         self.assertEqual(run_agent.select_prompt(False, "ans"), "ans")
 
 
+class TestBuildClaudeArgs(unittest.TestCase):
+    """`build_claude_args` の argv 構築ロジックを検証する。
+
+    主目的は `--settings <boid-stop-settings.json>` が常に注入されることの
+    回帰防止。 Stop hook がここで仕込まれないと、 agent が `boid agent stop`
+    を呼び忘れた時に claude が PTY interactive のまま終わらず、 task が
+    executing で stuck する。
+    """
+
+    def test_includes_settings_flag(self):
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="",
+            prompt="/boid-executor",
+        )
+        # --settings <path> がペアで含まれている
+        self.assertIn("--settings", args)
+        idx = args.index("--settings")
+        self.assertLess(idx + 1, len(args), "--settings に続く path が無い")
+        # boid runtime 用 stop settings を指している
+        self.assertTrue(args[idx + 1].endswith("boid-stop-settings.json"), args[idx + 1])
+
+    def test_settings_path_points_to_existing_file(self):
+        # kit 内に同梱した settings JSON が実在することを確認 (deploy 漏れの回帰防止)。
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="",
+            prompt="/boid-executor",
+        )
+        settings_path = args[args.index("--settings") + 1]
+        self.assertTrue(os.path.isfile(settings_path), f"missing settings file: {settings_path}")
+        with open(settings_path) as fh:
+            cfg = json.load(fh)
+        # Stop hook が登録されていることを軽くスモークテスト。
+        self.assertIn("hooks", cfg)
+        self.assertIn("Stop", cfg["hooks"])
+        stop_entries = cfg["hooks"]["Stop"]
+        self.assertTrue(stop_entries, "Stop hook の entries が空")
+        commands = [h.get("command", "") for entry in stop_entries for h in entry.get("hooks", [])]
+        self.assertTrue(
+            any("boid agent stop" in cmd for cmd in commands),
+            f"Stop hook が `boid agent stop` を呼んでいない: {commands}",
+        )
+
+    def test_includes_resume_when_is_resume(self):
+        args = run_agent.build_claude_args(
+            is_resume=True,
+            session_id="sess-resume",
+            model="",
+            prompt="hello",
+        )
+        self.assertIn("--resume", args)
+        self.assertEqual(args[args.index("--resume") + 1], "sess-resume")
+        self.assertNotIn("--session-id", args)
+
+    def test_includes_session_id_when_not_resume(self):
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-new",
+            model="",
+            prompt="hello",
+        )
+        self.assertIn("--session-id", args)
+        self.assertEqual(args[args.index("--session-id") + 1], "sess-new")
+        self.assertNotIn("--resume", args)
+
+    def test_includes_model_when_set(self):
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="claude-opus-4-7",
+            prompt="hello",
+        )
+        self.assertIn("--model", args)
+        self.assertEqual(args[args.index("--model") + 1], "claude-opus-4-7")
+
+    def test_omits_model_when_empty(self):
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="",
+            prompt="hello",
+        )
+        self.assertNotIn("--model", args)
+
+    def test_prompt_is_last_positional(self):
+        # 既存挙動と整合: prompt は argv 末尾の positional。
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="",
+            prompt="/boid-executor",
+        )
+        self.assertEqual(args[-1], "/boid-executor")
+
+    def test_custom_settings_path_is_respected(self):
+        # テスト用に別 path を渡せる (回帰防止というより API 形状確認)。
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="",
+            prompt="hi",
+            stop_settings_path="/tmp/custom-settings.json",
+        )
+        idx = args.index("--settings")
+        self.assertEqual(args[idx + 1], "/tmp/custom-settings.json")
+
+
 if __name__ == "__main__":
     unittest.main()
