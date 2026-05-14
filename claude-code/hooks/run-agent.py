@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 """Claude Code agent runner.
 
-Launches an interactive `claude` session (PTY-backed) for every hook invocation.
-boid daemon takes care of terminating the session: when the agent calls
-`boid task notify --ask` or `boid job done`, the daemon SIGTERMs the runtime.
-The bash EXIT trap then fires `boid job done` and CompleteJob's idempotency
-guard absorbs the second call.
+Launches an interactive `claude` session (PTY-backed) for every hook
+invocation. When the agent calls `boid task notify --ask`, the boid daemon
+delivers SIGUSR1 to the runtime's process group. The outer / inner bash
+scripts mark SIGUSR1 as SIG_IGN (`trap '' USR1`) which is inherited across
+execve(2), so bash / pasta / unshare all survive untouched. claude is
+launched in its own session via `start_new_session=True`, so it never sees
+the group SIGUSR1. The Python signal handler installed below is therefore
+the sole responder: it sends SIGTERM to just the claude process, letting
+claude shut down gracefully (flush transcript / session jsonl). After
+claude exits, run-agent.py exits naturally → bash sees foreground done →
+EXIT trap fires `boid job done --output-file payload_patch.json` against
+the still-valid broker token, completing the job through the normal path
+with the agent's payload_patch (session id) intact.
 
-We persist the claude --resume session id to payload_patch.json BEFORE starting
-claude so that even an abnormal termination (SIGKILL, OOM) leaves a usable
-session id for the next hook to resume from.
+We persist the claude --resume session id to payload_patch.json BEFORE
+starting claude so that even an abnormal termination (SIGKILL, OOM) leaves
+a usable session id for the next hook to resume from.
 """
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import uuid
@@ -219,12 +228,63 @@ def main():
     prompt = select_prompt(is_resume, b3_user_answer)
     args.append(prompt)
 
-    # Inherit stdio so claude drives the PTY that boid allocated for this job.
-    # boid daemon SIGTERMs this process tree on `boid task notify --ask` or
-    # `boid job done`; the EXIT trap added by the sandbox harness fires
-    # `boid job done` after we exit, which CompleteJob de-duplicates.
-    result = subprocess.run(args)
-    sys.exit(result.returncode)
+    # Install the SIGUSR1 handler BEFORE launching claude so a daemon-sent
+    # agent-stop signal cannot slip through during the Popen() call. The
+    # handler closes over a mutable container holding the Popen — until
+    # Popen returns the container is empty and the handler is a no-op (the
+    # window where SIGUSR1 could fire here is microseconds at worst, but
+    # the no-op is cheaper than the race). After Popen the container is
+    # populated and subsequent SIGUSR1 deliveries terminate claude.
+    proc_holder = {"proc": None, "stopped_by_daemon": False}
+
+    def on_agent_stop(_signum, _frame):
+        proc = proc_holder.get("proc")
+        # Record that the daemon (not claude itself or the host) initiated
+        # the shutdown so we can normalise the exit code below. Without
+        # this flag, claude's SIGTERM-induced exit code 143 would propagate
+        # up to `boid job done --exit-code 143` and the daemon would mark
+        # the job (and thus the entire awaiting task) as job_failed →
+        # aborted. The daemon's agent-stop is an intentional Q&A pause, not
+        # a failure.
+        proc_holder["stopped_by_daemon"] = True
+        if proc is None:
+            return
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except OSError:
+            # Process already gone — nothing to do.
+            pass
+
+    signal.signal(signal.SIGUSR1, on_agent_stop)
+    # pasta blocks SIGUSR1 at the kernel level (sigprocmask) for its own
+    # internal use, and the block is inherited by every descendant via
+    # fork(2). signal.signal() above only registers a handler — the signal
+    # would stay queued in pending state forever unless we also unblock it
+    # here. Without this unblock, the handler never fires and the daemon's
+    # agent-stop signal silently never lands.
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGUSR1})
+
+    # Launch claude in its own session so the daemon's SIGUSR1 (delivered to
+    # the runtime's process group) does not reach claude. The bash scripts
+    # mark SIGUSR1 as SIG_IGN (`trap '' USR1`) which is inherited across
+    # execve(2) to all intermediate processes (pasta / unshare / inner bash
+    # / run-agent.py until signal.signal() above overrides), so the group
+    # signal harmlessly bounces off everyone except this Python handler.
+    proc = subprocess.Popen(args, start_new_session=True)
+    proc_holder["proc"] = proc
+
+    # Wait for claude to exit. wait() is interruptible: when SIGUSR1
+    # arrives, Python invokes on_agent_stop (which terminates claude),
+    # wait() resumes and returns once claude is reaped.
+    exit_code = proc.wait()
+    if proc_holder["stopped_by_daemon"]:
+        # The daemon asked us to pause for Q&A; this is success from
+        # boid's perspective. Exit 0 so bash's EXIT trap propagates
+        # `boid job done --exit-code 0` and the task can settle into
+        # awaiting cleanly.
+        sys.exit(0)
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
