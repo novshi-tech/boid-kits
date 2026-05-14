@@ -1,0 +1,15 @@
+{
+  "$comment": "boid runtime 専用の追加 settings。 claude を `--settings <this-file>` で起動した時だけ適用される (ユーザの ~/.claude/settings.json は触らない)。 Stop hook が agent の応答終了ごとに `boid agent stop $BOID_JOB_ID` を呼び、 daemon が SIGUSR1 → run-agent.py → SIGTERM claude → bash EXIT trap → canonical `boid job done` の終了パスを駆動する。 agent が boid 系コマンドを呼び忘れて応答だけ返した場合の救済策。",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"${BOID_JOB_ID:-}\" ]; then boid agent stop \"$BOID_JOB_ID\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

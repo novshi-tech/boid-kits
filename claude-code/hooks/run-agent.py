@@ -166,6 +166,55 @@ def read_payload_from_file(path):
         return {}
 
 
+# boid runtime 専用の追加 settings。 claude を `--settings <this-path>` で
+# 起動した時だけ適用され、 ユーザの ~/.claude/settings.json には触らない。
+# 同梱の Stop hook が agent の応答終了ごとに `boid agent stop $BOID_JOB_ID`
+# を発行し、 daemon が SIGUSR1 → SIGTERM claude → bash EXIT trap → canonical
+# `boid job done --output-file payload_patch.json` の終了パスを駆動する。
+# agent が boid 系コマンドを呼び忘れて応答だけ返した場合の救済策。
+_BOID_STOP_SETTINGS = Path(__file__).resolve().parent / "boid-stop-settings.json"
+
+
+def build_claude_args(
+    *,
+    is_resume,
+    session_id,
+    model,
+    prompt,
+    stop_settings_path=_BOID_STOP_SETTINGS,
+):
+    """Build the argv for the `claude` subprocess.
+
+    Factored out so tests can verify the `--settings` injection and option
+    ordering without launching claude. The caller appends the positional
+    prompt last (after this returns), matching the existing flow.
+    """
+    # boid runtime は kit root を sandbox 内に同じ host path で bind-mount するため、
+    # 通常は kit 同梱の settings ファイルが見える。 見えない場合は kit deploy が
+    # 壊れている / sandbox の KitRoots が空 / 開発中の path 計算ミス、 のいずれか
+    # なので stderr に警告だけ出す (claude --settings 起動自体は失敗させない)。
+    if not os.path.isfile(str(stop_settings_path)):
+        print(
+            f"[run-agent] WARN: boid-stop-settings.json not found at {stop_settings_path}; "
+            "Stop hook safety net disabled — agent must call `boid agent stop` explicitly.",
+            file=sys.stderr,
+        )
+
+    args = ["claude", "--permission-mode", "bypassPermissions"]
+    # --settings は ~/.claude/settings.json と merge される (上書きではなく追加)
+    # ので、 boid 由来の Stop hook を仕込んでもユーザ設定は保たれる。
+    args.extend(["--settings", str(stop_settings_path)])
+    if is_resume:
+        args.extend(["--resume", session_id])
+    else:
+        args.extend(["--session-id", session_id])
+    if model:
+        args.extend(["--model", model])
+    args.extend(["--append-system-prompt", _PAUSE_SYSTEM_PROMPT])
+    args.append(prompt)
+    return args
+
+
 def ensure_skills_symlinks():
     claude_skills_dir = Path.home() / ".claude" / "skills"
     claude_skills_dir.mkdir(parents=True, exist_ok=True)
@@ -221,17 +270,13 @@ def main():
         updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
         write_payload_patch(updated_sessions)
 
-    args = ["claude", "--permission-mode", "bypassPermissions"]
-    if is_resume:
-        args.extend(["--resume", session_id])
-    else:
-        args.extend(["--session-id", session_id])
-    if model:
-        args.extend(["--model", model])
-    args.extend(["--append-system-prompt", _PAUSE_SYSTEM_PROMPT])
-
     prompt = select_prompt(is_resume, b3_user_answer, invoked_type)
-    args.append(prompt)
+    args = build_claude_args(
+        is_resume=is_resume,
+        session_id=session_id,
+        model=model,
+        prompt=prompt,
+    )
 
     # Install the SIGUSR1 handler BEFORE launching claude so a daemon-sent
     # agent-stop signal cannot slip through during the Popen() call. The
