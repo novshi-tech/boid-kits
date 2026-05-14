@@ -1,23 +1,22 @@
 executor:
-  name: executor
   kits:
-    - github.com/novshi-tech/boid-kits/github-pr-verification
-    - github.com/novshi-tech/boid-kits/github-auto-merge
+    - github.com/novshi-tech/boid-kits/git-auto-merge
   default_instruction:
     type: execution
-    consumer: {{.Consumer}}
     message: |
-      /boid-executor skill に従って task.yaml の title と
-      description に記述された内容を実装せよ。 実装が完了したら
-      プロジェクト側のリリーススキル (例: /dev-pr-flow) があれば
-      それを呼ぶ。 無ければローカルで commit + push して終了する。
+      Implement what the task.yaml title and description ask for,
+      then commit on the task branch and exit. The `git-auto-merge`
+      gate runs at executing-exit and fast-forwards the task branch
+      into the base branch locally with `git merge --no-ff`, so no
+      push or PR is required.
 supervisor:
-  name: supervisor
   kits:
     - github.com/novshi-tech/boid-kits/boid-tasks
   default_instruction:
     type: execution
-    consumer: {{.Consumer}}
-    interactive: true
     message: |
-      /boid-supervisor skill に従って子タスクを作成して監視せよ。
+      Triage the request, create child executor tasks, and monitor
+      them in order. Each child's branch is merged into the base
+      branch locally by the `git-auto-merge` gate; once a child is
+      `done` with `artifact.auto-merge.merged: true`, verify the
+      merged result on base before launching the next child.
