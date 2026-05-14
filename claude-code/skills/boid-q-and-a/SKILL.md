@@ -7,7 +7,7 @@ description: >
 
 # boid Q&A
 
-When user judgment is needed, pause the session, send a question via `boid task notify --ask`, and wait for the user's response. The boid runtime resumes the session automatically when the user answers.
+When user judgment is needed, send a question via `boid task notify --ask`. The boid daemon transitions the task to `awaiting`, **terminates this agent session automatically**, and spawns a fresh session with the user's answer injected once they reply.
 
 ## When to Use
 
@@ -26,8 +26,6 @@ Do **not** call this for progress reports — task status is visible in the task
 boid task notify "$BOID_TASK_ID" \
     --message "<brief context>" \
     --ask "<specific question>"
-echo paused
-exit 0
 ```
 
 | Flag | Purpose |
@@ -35,9 +33,7 @@ exit 0
 | `--message` | One or two sentences explaining *what* you are doing and *why* you need input |
 | `--ask` | The question itself. Markdown is rendered. List options as bullet points for easy mobile response |
 
-`echo paused` is a required sentinel — the runner detects this exact string to transition the task to `awaiting`. Do not modify it or add text after it.
-
-Exit immediately with `exit 0` after the notify call. Do not perform additional work.
+After the call returns successfully, **stop generating** — the boid daemon will SIGTERM this runtime shortly. No sentinel output, no explicit `exit`, and no further work is required.
 
 ## Writing Good Questions
 
@@ -51,8 +47,6 @@ boid task notify "$BOID_TASK_ID" \
 - **A. Online migration** — no downtime, runs a ~10 min background job, lower risk
 - **B. Maintenance-window migration** — fast (< 1 min), requires ~5 min downtime
 - **C. Show me a different approach**"
-echo paused
-exit 0
 ```
 
 Guidelines:
@@ -63,15 +57,6 @@ Guidelines:
 
 ## What Happens After Pausing
 
-After `exit 0`, boid transitions the task to `awaiting`. When the user answers (via the Web UI or `boid task answer`), boid automatically resumes the agent session with the answer injected as the next message. The agent sees it as if the user typed it — no special resume handling is needed on your end.
+After `boid task notify --ask` returns, the daemon transitions the task to `awaiting` and immediately sends SIGTERM to the agent runtime. The bash EXIT trap fires `boid job done` (absorbed idempotently), and the session ends.
 
-## Autonomous vs Interactive Mode
-
-Check `$BOID_INTERACTIVE` before calling:
-
-| Mode | `BOID_INTERACTIVE` | Action when stuck |
-|---|---|---|
-| Interactive | `1` | Call `boid task notify --ask` and pause |
-| Autonomous | unset or `0` | Write the blocker to the artifact and `exit 0` — do **not** call notify |
-
-In autonomous mode, the user monitors task state via the task list. Notify calls in autonomous mode are not actionable and should be avoided.
+When the user answers (via the Web UI or `boid task answer`), boid spawns a fresh agent session with the answer surfaced as `$BOID_USER_ANSWER` and the prior `claude --resume` session id restored, so context continuity is preserved.

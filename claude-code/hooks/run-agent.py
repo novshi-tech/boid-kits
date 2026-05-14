@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Claude Code agent runner with C2 (claude --print + resume) based session management."""
+"""Claude Code agent runner.
+
+Launches an interactive `claude` session (PTY-backed) for every hook invocation.
+boid daemon takes care of terminating the session: when the agent calls
+`boid task notify --ask` or `boid job done`, the daemon SIGTERMs the runtime.
+The bash EXIT trap then fires `boid job done` and CompleteJob's idempotency
+guard absorbs the second call.
+
+We persist the claude --resume session id to payload_patch.json BEFORE starting
+claude so that even an abnormal termination (SIGKILL, OOM) leaves a usable
+session id for the next hook to resume from.
+"""
 
 import json
 import os
@@ -8,11 +19,15 @@ import sys
 import uuid
 from pathlib import Path
 
-# Prompt injected as system prompt addendum to instruct the agent on pausing behavior.
+# System prompt addendum reminding the agent how to pause for user input.
+# Unlike the previous non-interactive flow, the agent no longer needs to emit a
+# "paused" sentinel — boid daemon SIGTERMs this runtime as soon as
+# `boid task notify --ask` succeeds, so just calling notify is enough.
 _PAUSE_SYSTEM_PROMPT = (
-    "ユーザに質問や確認が必要になった場合は、以下の手順を踏むこと (詳細は /boid-q-and-a skill 参照): "
-    "まず Bash で `boid task notify \"$BOID_TASK_ID\" --message \"<コンテキスト>\" --ask \"<質問>\"` を実行し、"
-    "その後、何もせず \"paused\" とだけ出力して終了せよ。"
+    "ユーザに質問や確認が必要になった場合は、 Bash で "
+    "`boid task notify \"$BOID_TASK_ID\" --message \"<コンテキスト>\" --ask \"<質問>\"` "
+    "を実行せよ。 boid daemon が自動的にこのセッションを終了し、 ユーザの回答が"
+    "得られた時点で新しいセッションとして再開する。 詳細は /boid-q-and-a skill 参照。"
 )
 
 # Resume without a user answer (e.g. reopen with a new instruction): the prior
@@ -137,15 +152,6 @@ def read_payload_from_file(path):
         return {}
 
 
-def read_payload_from_string(data):
-    if not data or not data.strip():
-        return {}
-    try:
-        return json.loads(data)
-    except (json.JSONDecodeError, ValueError):
-        return {}
-
-
 def ensure_skills_symlinks():
     claude_skills_dir = Path.home() / ".claude" / "skills"
     claude_skills_dir.mkdir(parents=True, exist_ok=True)
@@ -168,64 +174,20 @@ def ensure_skills_symlinks():
                     skill_link.symlink_to(skill_dir)
 
 
-def run_non_interactive(args, prompt, format_stream):
-    """Run claude in non-interactive (print) mode.
-
-    Streams output through format-stream.py for display and collects the
-    final result event to detect the 'paused' sentinel.
-
-    Returns (exit_code, result_event_or_None).
-    """
-    full_args = ["setsid", "-w"] + args + ["-p", prompt]
-
-    claude_proc = subprocess.Popen(
-        full_args,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    format_proc = subprocess.Popen(
-        ["python3", format_stream],
-        stdin=subprocess.PIPE,
-    )
-
-    result_event = None
-    for raw_line in claude_proc.stdout:
-        try:
-            format_proc.stdin.write(raw_line)
-            format_proc.stdin.flush()
-        except BrokenPipeError:
-            pass
-        try:
-            event = json.loads(raw_line.decode("utf-8", errors="replace"))
-            if event.get("type") == "result":
-                result_event = event
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-
-    format_proc.stdin.close()
-    format_proc.wait()
-    exit_code = claude_proc.wait()
-    return exit_code, result_event
-
-
 def main():
     ensure_skills_symlinks()
 
-    interactive = os.environ.get("BOID_INTERACTIVE") == "1"
     model = os.environ.get("BOID_MODEL", "")
     invoked_type = os.environ.get("BOID_INVOKED_TYPE", "executor")
     invoked_name = os.environ.get("BOID_INVOKED_NAME", "")
 
-    # B3 env vars: set by boid daemon when re-spawning after user answer (awaiting → executing).
+    # B3 env vars: set by boid daemon when re-spawning after user answer
+    # (awaiting → executing) or as part of a continuing session.
     b3_session_id = os.environ.get("BOID_AGENT_SESSION_ID", "")
     b3_user_answer = os.environ.get("BOID_USER_ANSWER", "")
 
-    if interactive:
-        payload_path = str(Path.home() / ".boid" / "context" / "payload.json")
-        payload = read_payload_from_file(payload_path)
-    else:
-        payload = read_payload_from_string(sys.stdin.read())
+    payload_path = str(Path.home() / ".boid" / "context" / "payload.json")
+    payload = read_payload_from_file(payload_path)
 
     # Determine session ID and whether this is a resume.
     if b3_session_id:
@@ -237,6 +199,14 @@ def main():
         sessions = get_sessions(payload)
         session_id, is_resume = resolve_session(sessions, invoked_type, invoked_name)
 
+    # Persist session id up-front so abnormal termination (SIGKILL, OOM) still
+    # leaves a usable resume target for the next hook invocation. The EXIT trap
+    # reads payload_patch.json regardless of how we exit.
+    if not b3_session_id:
+        sessions = get_sessions(payload)
+        updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
+        write_payload_patch(updated_sessions)
+
     args = ["claude", "--permission-mode", "bypassPermissions"]
     if is_resume:
         args.extend(["--resume", session_id])
@@ -244,54 +214,17 @@ def main():
         args.extend(["--session-id", session_id])
     if model:
         args.extend(["--model", model])
+    args.extend(["--append-system-prompt", _PAUSE_SYSTEM_PROMPT])
 
-    if interactive:
-        args.append("/boid-sandbox")
-        result = subprocess.run(args)
-        exit_code = result.returncode
-    else:
-        args.extend([
-            "--append-system-prompt", _PAUSE_SYSTEM_PROMPT,
-            "--output-format", "stream-json",
-            "--verbose",
-        ])
+    prompt = select_prompt(is_resume, b3_user_answer)
+    args.append(prompt)
 
-        script_path = Path(__file__).resolve()
-        prefix = script_path.name.split("--", 1)[0] + "--" if "--" in script_path.name else ""
-        format_stream = str(script_path.parent / f"{prefix}format-stream.py")
-
-        prompt = select_prompt(is_resume, b3_user_answer)
-
-        exit_code, result_event = run_non_interactive(args, prompt, format_stream)
-
-        if exit_code != 0:
-            print(
-                f"[run-agent] claude exited with code {exit_code}",
-                file=sys.stderr,
-            )
-        elif result_event is None:
-            print(
-                "[run-agent] WARNING: no result event found in output",
-                file=sys.stderr,
-            )
-        else:
-            result_text = result_event.get("result", "")
-            if result_text == "paused":
-                # Agent self-paused via boid task notify; task transitions to awaiting.
-                # Write session to payload so B3 can provide it as BOID_AGENT_SESSION_ID.
-                if not b3_session_id:
-                    sessions = get_sessions(payload)
-                    updated = update_sessions(sessions, invoked_type, invoked_name, session_id)
-                    write_payload_patch(updated)
-                sys.exit(0)
-
-    # Persist session for subsequent runs (payload-based mode only).
-    if not b3_session_id:
-        sessions = get_sessions(payload)
-        updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
-        write_payload_patch(updated_sessions)
-
-    sys.exit(exit_code)
+    # Inherit stdio so claude drives the PTY that boid allocated for this job.
+    # boid daemon SIGTERMs this process tree on `boid task notify --ask` or
+    # `boid job done`; the EXIT trap added by the sandbox harness fires
+    # `boid job done` after we exit, which CompleteJob de-duplicates.
+    result = subprocess.run(args)
+    sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
