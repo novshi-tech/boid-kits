@@ -328,19 +328,6 @@ class TestReadPayloadFromFile(unittest.TestCase):
             os.unlink(path)
 
 
-class TestReadPayloadFromString(unittest.TestCase):
-    def test_valid_json(self):
-        data = json.dumps({"artifact": {"claude_code": {"sessions": []}}})
-        payload = run_agent.read_payload_from_string(data)
-        self.assertEqual(payload["artifact"]["claude_code"]["sessions"], [])
-
-    def test_empty_string(self):
-        self.assertEqual(run_agent.read_payload_from_string(""), {})
-
-    def test_invalid_json(self):
-        self.assertEqual(run_agent.read_payload_from_string("{bad json"), {})
-
-
 class TestEnvVarDefaults(unittest.TestCase):
     def test_default_type_is_executor(self):
         env = {}
@@ -359,8 +346,8 @@ class TestEnvVarDefaults(unittest.TestCase):
 class TestB3EnvVarHandling(unittest.TestCase):
     """B3 モード (BOID_AGENT_SESSION_ID / BOID_USER_ANSWER) のロジック検証。
 
-    run_non_interactive と main は subprocess を起動するため直接テストしない。
-    B3 env vars から session / prompt を決定するロジックを単体で検証する。
+    main は subprocess を起動するため直接テストしない。 B3 env vars から
+    session / prompt を決定するロジックを単体で検証する。
     """
 
     def _resolve(self, b3_session_id, b3_user_answer, sessions):
@@ -436,34 +423,6 @@ class TestSelectPrompt(unittest.TestCase):
     def test_answer_takes_precedence_when_not_resume(self):
         # is_resume=False でも user_answer があれば優先 (defensive)
         self.assertEqual(run_agent.select_prompt(False, "ans"), "ans")
-
-
-class TestPausedDetection(unittest.TestCase):
-    """result event の paused 判定ロジック検証。"""
-
-    def _is_paused(self, result_event):
-        if result_event is None:
-            return False
-        return result_event.get("result", "") == "paused"
-
-    def test_paused_result_detected(self):
-        event = {"type": "result", "result": "paused", "session_id": "s1"}
-        self.assertTrue(self._is_paused(event))
-
-    def test_normal_result_not_paused(self):
-        event = {"type": "result", "result": "Task complete.", "session_id": "s1"}
-        self.assertFalse(self._is_paused(event))
-
-    def test_empty_result_not_paused(self):
-        event = {"type": "result", "result": "", "session_id": "s1"}
-        self.assertFalse(self._is_paused(event))
-
-    def test_none_event_not_paused(self):
-        self.assertFalse(self._is_paused(None))
-
-    def test_missing_result_key_not_paused(self):
-        event = {"type": "result", "session_id": "s1"}
-        self.assertFalse(self._is_paused(event))
 
 
 if __name__ == "__main__":
