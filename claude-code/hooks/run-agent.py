@@ -51,16 +51,47 @@ _RESUME_PROMPT = (
     "確認し、 新しい状況に対応してください。"
 )
 
+# daemon 再起動によってタスクが中断された場合の resume 専用プロンプト。
+# 通常の reopen (Q&A 回答 / instruction 追記) とは異なり、直前の作業を
+# 復元するリカバリ文脈であることを明示する。
+_DAEMON_RESTART_RESUME_PROMPT = (
+    "daemon が再起動したため、前回の作業が中断されました。"
+    " ~/.boid/context/ 以下のファイル (task.yaml, instructions.yaml, payload.yaml) を確認し、"
+    " 中断前に作業していたファイルや状態を把握してリカバリを試みてください。"
+    " 不明な点は `boid task notify \"$BOID_TASK_ID\""
+    " --message \"<コンテキスト>\" --ask \"<質問>\"` でユーザに確認してください。"
+)
+
 _SKILL_BY_BEHAVIOR = {
     "supervisor": "/boid-supervisor",
     "executor": "/boid-executor",
 }
 
 
-def select_prompt(is_resume, user_answer, invoked_type="executor"):
+def get_abort_code(task_id):
+    """Return lifecycle.abort.code for task_id, or "" on any failure."""
+    if not task_id:
+        return ""
+    try:
+        result = subprocess.run(
+            ["boid", "task", "get", task_id, "--field", "lifecycle.abort.code"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return ""
+
+
+def select_prompt(is_resume, user_answer, invoked_type="executor", abort_code=""):
     if user_answer:
         return user_answer
     if is_resume:
+        if abort_code == "daemon_restart":
+            return _DAEMON_RESTART_RESUME_PROMPT
         return _RESUME_PROMPT
     return _SKILL_BY_BEHAVIOR.get(invoked_type, "/boid-sandbox")
 
@@ -243,6 +274,7 @@ def main():
     model = os.environ.get("BOID_MODEL", "")
     invoked_type = os.environ.get("BOID_INVOKED_TYPE", "executor")
     invoked_name = os.environ.get("BOID_INVOKED_NAME", "")
+    task_id = os.environ.get("BOID_TASK_ID", "")
 
     # B3 env vars: set by boid daemon when re-spawning after user answer
     # (awaiting → executing) or as part of a continuing session.
@@ -270,7 +302,13 @@ def main():
         updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
         write_payload_patch(updated_sessions)
 
-    prompt = select_prompt(is_resume, b3_user_answer, invoked_type)
+    # Fetch abort code only on resume without a user answer to distinguish
+    # daemon_restart aborts from normal reopens (Q&A or new instruction).
+    abort_code = ""
+    if is_resume and not b3_user_answer:
+        abort_code = get_abort_code(task_id)
+
+    prompt = select_prompt(is_resume, b3_user_answer, invoked_type, abort_code)
     args = build_claude_args(
         is_resume=is_resume,
         session_id=session_id,

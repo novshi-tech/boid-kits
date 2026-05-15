@@ -436,6 +436,87 @@ class TestSelectPrompt(unittest.TestCase):
         # is_resume=False でも user_answer があれば優先 (defensive)
         self.assertEqual(run_agent.select_prompt(False, "ans"), "ans")
 
+    def test_resume_daemon_restart_returns_daemon_restart_prompt(self):
+        prompt = run_agent.select_prompt(True, "", "executor", "daemon_restart")
+        self.assertEqual(prompt, run_agent._DAEMON_RESTART_RESUME_PROMPT)
+        self.assertIn("daemon", prompt)
+        self.assertIn("リカバリ", prompt)
+
+    def test_resume_other_abort_code_returns_resume_prompt(self):
+        # daemon_restart 以外の abort code は通常の resume prompt
+        prompt = run_agent.select_prompt(True, "", "executor", "other_code")
+        self.assertEqual(prompt, run_agent._RESUME_PROMPT)
+
+    def test_resume_empty_abort_code_returns_resume_prompt(self):
+        prompt = run_agent.select_prompt(True, "", "executor", "")
+        self.assertEqual(prompt, run_agent._RESUME_PROMPT)
+
+    def test_user_answer_overrides_daemon_restart(self):
+        # user_answer があれば daemon_restart abort_code より優先される
+        prompt = run_agent.select_prompt(True, "go ahead", "executor", "daemon_restart")
+        self.assertEqual(prompt, "go ahead")
+
+    def test_daemon_restart_prompt_differs_from_resume_prompt(self):
+        self.assertNotEqual(
+            run_agent._DAEMON_RESTART_RESUME_PROMPT,
+            run_agent._RESUME_PROMPT,
+        )
+
+
+class TestGetAbortCode(unittest.TestCase):
+    """get_abort_code のユニットテスト。"""
+
+    def test_empty_task_id_returns_empty(self):
+        self.assertEqual(run_agent.get_abort_code(""), "")
+
+    def test_none_task_id_returns_empty(self):
+        # None を渡しても空文字を返す (防御的)
+        self.assertEqual(run_agent.get_abort_code(None), "")
+
+    def test_successful_call_returns_stripped_code(self):
+        import unittest.mock as mock
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="daemon_restart\n")
+            result = run_agent.get_abort_code("task-id-123")
+        self.assertEqual(result, "daemon_restart")
+        # boid CLI が正しい引数で呼ばれていること
+        mock_run.assert_called_once_with(
+            ["boid", "task", "get", "task-id-123", "--field", "lifecycle.abort.code"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+    def test_empty_abort_code_field_returns_empty_string(self):
+        import unittest.mock as mock
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="  \n")
+            result = run_agent.get_abort_code("task-id-123")
+        self.assertEqual(result, "")
+
+    def test_nonzero_returncode_returns_empty(self):
+        import unittest.mock as mock
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=1, stdout="")
+            result = run_agent.get_abort_code("task-id-123")
+        self.assertEqual(result, "")
+
+    def test_oserror_returns_empty(self):
+        import unittest.mock as mock
+        with mock.patch("subprocess.run", side_effect=OSError("boid not found")):
+            result = run_agent.get_abort_code("task-id-123")
+        self.assertEqual(result, "")
+
+    def test_timeout_returns_empty(self):
+        import unittest.mock as mock
+        import subprocess as _subprocess
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_subprocess.TimeoutExpired(cmd="boid", timeout=5),
+        ):
+            result = run_agent.get_abort_code("task-id-123")
+        self.assertEqual(result, "")
+
 
 class TestBuildClaudeArgs(unittest.TestCase):
     """`build_claude_args` の argv 構築ロジックを検証する。
