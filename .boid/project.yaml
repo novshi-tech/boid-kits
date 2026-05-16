@@ -10,16 +10,14 @@ kits:
 task_behaviors:
   executor:
     name: Development
-    kits:
-      - github.com/novshi-tech/boid-kits/github-auto-merge
     default_instruction:
       type: execution
       agent: claude-code
       model: sonnet
       message: |
-        /boid-executor skill に従って task.yaml の title と
-        description に記述された内容を実装せよ。 完了したら
-        /dev-pr-flow があればそれを、 無ければ commit + push で終了する。
+        Follow the /boid-executor skill to implement what task.yaml's
+        title and description describe. When done, run /dev-pr-flow if
+        available; otherwise commit + push and exit.
   supervisor:
     name: Plan
     default_instruction:
@@ -27,7 +25,8 @@ task_behaviors:
       agent: claude-code
       model: opus
       message: |
-        /boid-supervisor skill に従って実装計画を構築し子 executor
-        タスクを作成・監視せよ。 child の PR は github-auto-merge kit に
-        より main にマージされるので、 マージ完了後に pull して
-        子タスクの成果を検証してから次へ。
+        Follow the /boid-supervisor skill to build the implementation
+        plan and create/monitor child executor tasks. Merging each
+        child's PR is the supervisor's own responsibility: once a
+        child finishes, merge its PR into main, pull, and verify the
+        result before launching the next child.
