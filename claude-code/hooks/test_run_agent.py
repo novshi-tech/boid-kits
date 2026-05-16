@@ -521,48 +521,10 @@ class TestGetAbortCode(unittest.TestCase):
 class TestBuildClaudeArgs(unittest.TestCase):
     """`build_claude_args` の argv 構築ロジックを検証する。
 
-    主目的は `--settings <boid-stop-settings.json>` が常に注入されることの
-    回帰防止。 Stop hook がここで仕込まれないと、 agent が `boid agent stop`
-    を呼び忘れた時に claude が PTY interactive のまま終わらず、 task が
-    executing で stuck する。
+    lifecycle-accountability Phase 2.a で `--settings` injection (旧 Stop
+    hook 経路) は廃止されたため、 関連テストは削除済。 残る検証は resume /
+    session-id / model フラグの正しい組み合わせ。
     """
-
-    def test_includes_settings_flag(self):
-        args = run_agent.build_claude_args(
-            is_resume=False,
-            session_id="sess-1",
-            model="",
-            prompt="/boid-executor",
-        )
-        # --settings <path> がペアで含まれている
-        self.assertIn("--settings", args)
-        idx = args.index("--settings")
-        self.assertLess(idx + 1, len(args), "--settings に続く path が無い")
-        # boid runtime 用 stop settings を指している
-        self.assertTrue(args[idx + 1].endswith("boid-stop-settings.json"), args[idx + 1])
-
-    def test_settings_path_points_to_existing_file(self):
-        # kit 内に同梱した settings JSON が実在することを確認 (deploy 漏れの回帰防止)。
-        args = run_agent.build_claude_args(
-            is_resume=False,
-            session_id="sess-1",
-            model="",
-            prompt="/boid-executor",
-        )
-        settings_path = args[args.index("--settings") + 1]
-        self.assertTrue(os.path.isfile(settings_path), f"missing settings file: {settings_path}")
-        with open(settings_path) as fh:
-            cfg = json.load(fh)
-        # Stop hook が登録されていることを軽くスモークテスト。
-        self.assertIn("hooks", cfg)
-        self.assertIn("Stop", cfg["hooks"])
-        stop_entries = cfg["hooks"]["Stop"]
-        self.assertTrue(stop_entries, "Stop hook の entries が空")
-        commands = [h.get("command", "") for entry in stop_entries for h in entry.get("hooks", [])]
-        self.assertTrue(
-            any("boid agent stop" in cmd for cmd in commands),
-            f"Stop hook が `boid agent stop` を呼んでいない: {commands}",
-        )
 
     def test_includes_resume_when_is_resume(self):
         args = run_agent.build_claude_args(
@@ -615,17 +577,16 @@ class TestBuildClaudeArgs(unittest.TestCase):
         )
         self.assertEqual(args[-1], "/boid-executor")
 
-    def test_custom_settings_path_is_respected(self):
-        # テスト用に別 path を渡せる (回帰防止というより API 形状確認)。
+    def test_does_not_inject_settings_flag(self):
+        # lifecycle-accountability Phase 2.a: Stop hook は廃止されたので
+        # `--settings` フラグは注入されない (回帰防止)。
         args = run_agent.build_claude_args(
             is_resume=False,
             session_id="sess-1",
             model="",
-            prompt="hi",
-            stop_settings_path="/tmp/custom-settings.json",
+            prompt="/boid-executor",
         )
-        idx = args.index("--settings")
-        self.assertEqual(args[idx + 1], "/tmp/custom-settings.json")
+        self.assertNotIn("--settings", args)
 
 
 if __name__ == "__main__":
