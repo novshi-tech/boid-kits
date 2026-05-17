@@ -1,3 +1,4 @@
+deprecated: true
 meta:
   name: boid-tasks
   description: boid タスク管理の標準ゲートとスキャフォールドを提供する
