@@ -1,3 +1,4 @@
+deprecated: true
 meta:
   name: GitHub auto-merge
   description: GitHub PR の auto-merge を自動化する

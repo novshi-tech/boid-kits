@@ -1,3 +1,4 @@
+deprecated: true
 meta:
   name: Git auto-merge (local)
   description: ローカル git 操作のみで base branch にマージコミットを積む
