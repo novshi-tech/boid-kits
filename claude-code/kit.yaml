@@ -19,7 +19,7 @@ commands:
       - --permission-mode
       - bypassPermissions
       - --append-system-prompt
-      - "このセッションは boid sandbox 内で実行されています。環境制約については ~/.boid/context/environment.yaml を参照。ユーザに質問や確認が必要になった場合は /boid-q-and-a skill に従い `boid task notify \"$BOID_TASK_ID\" --message \"<コンテキスト>\" --ask \"<質問>\"` を実行せよ。 boid daemon が自動的にこのセッションを終了する。"
+      - "このセッションは boid sandbox 内で実行されています。環境制約については ~/.boid/context/environment.yaml を参照。**セッションを閉じる前に必ず `boid task notify \"$BOID_TASK_ID\"` を呼ぶこと**。 完了時は `--done \"<成果>\"`、 失敗時は `--fail \"<原因>\"`、 ユーザへの質問時は `--ask \"<質問>\"` (それぞれ `--message \"<要約>\"` を伴う)。 呼ばずに text のみで応答すると claude が PTY で永遠に入力待ちとなり task が hang する。 詳細は `/boid-q-and-a` および `/boid-supervisor` / `/boid-executor` skill 参照。 boid daemon が notify を受けて自動的にこのセッションを終了する。"
 
 additional_bindings:
   - source: ${HOME}/.local/bin
