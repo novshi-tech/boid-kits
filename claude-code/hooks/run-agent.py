@@ -33,10 +33,13 @@ from pathlib import Path
 # "paused" sentinel — boid daemon SIGTERMs this runtime as soon as
 # `boid task notify --ask` succeeds, so just calling notify is enough.
 _PAUSE_SYSTEM_PROMPT = (
-    "ユーザに質問や確認が必要になった場合は、 Bash で "
-    "`boid task notify \"$BOID_TASK_ID\" --message \"<コンテキスト>\" --ask \"<質問>\"` "
-    "を実行せよ。 boid daemon が自動的にこのセッションを終了し、 ユーザの回答が"
-    "得られた時点で新しいセッションとして再開する。 詳細は /boid-q-and-a skill 参照。"
+    "セッションを終える前に必ず `boid task notify \"$BOID_TASK_ID\"` を呼ぶこと。"
+    " 完了時は `--message \"<要約>\" --done \"<成果>\"`、 失敗時は"
+    " `--message \"<要約>\" --fail \"<原因>\"`、 ユーザへの質問・判断要求時は"
+    " `--message \"<コンテキスト>\" --ask \"<質問>\"` を使う。 呼ばずに応答を text"
+    " のみで返すと、 claude が PTY で永遠に入力待ちになり task が hang する。"
+    " notify 後は boid daemon が自動的にこのセッションを終了する。 詳細は"
+    " `/boid-q-and-a` および `/boid-supervisor` / `/boid-executor` skill 参照。"
 )
 
 # Resume without a user answer (e.g. reopen with a new instruction): the prior
@@ -48,7 +51,10 @@ _PAUSE_SYSTEM_PROMPT = (
 _RESUME_PROMPT = (
     "状態が更新されました。 BOID_USER_ANSWER 環境変数 (Q&A 回答があれば設定されている) "
     "と ~/.boid/context/ 以下のファイル (task.yaml, instructions.yaml, payload.yaml) を"
-    "確認し、 新しい状況に対応してください。"
+    "確認し、 新しい状況に対応してください。 prior context が done に見えても、"
+    " instructions.yaml の末尾要素は新しい指示の可能性があるので必ず読むこと。"
+    " **セッションを終える前に `boid task notify --done` / `--fail` /"
+    " `--ask` のいずれかを必ず呼ぶこと (idle 離脱は禁止)**。"
 )
 
 # daemon 再起動によってタスクが中断された場合の resume 専用プロンプト。
@@ -60,6 +66,8 @@ _DAEMON_RESTART_RESUME_PROMPT = (
     " 中断前に作業していたファイルや状態を把握してリカバリを試みてください。"
     " 不明な点は `boid task notify \"$BOID_TASK_ID\""
     " --message \"<コンテキスト>\" --ask \"<質問>\"` でユーザに確認してください。"
+    " **セッションを終える前には必ず `--done` / `--fail` / `--ask` のいずれかを呼ぶこと"
+    " (idle 離脱は禁止)**。"
 )
 
 _SKILL_BY_BEHAVIOR = {
