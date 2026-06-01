@@ -329,17 +329,17 @@ class TestReadPayloadFromFile(unittest.TestCase):
 
 
 class TestEnvVarDefaults(unittest.TestCase):
-    def test_default_type_is_executor(self):
+    def test_default_behavior_is_empty(self):
         env = {}
-        self.assertEqual(env.get("BOID_INVOKED_TYPE", "executor"), "executor")
+        self.assertEqual(env.get("BOID_INVOKED_BEHAVIOR", ""), "")
 
     def test_default_name_is_empty(self):
         env = {}
         self.assertEqual(env.get("BOID_INVOKED_NAME", ""), "")
 
     def test_explicit_values_used(self):
-        env = {"BOID_INVOKED_TYPE": "verifier", "BOID_INVOKED_NAME": "security"}
-        self.assertEqual(env.get("BOID_INVOKED_TYPE", "executor"), "verifier")
+        env = {"BOID_INVOKED_BEHAVIOR": "supervisor", "BOID_INVOKED_NAME": "security"}
+        self.assertEqual(env.get("BOID_INVOKED_BEHAVIOR", ""), "supervisor")
         self.assertEqual(env.get("BOID_INVOKED_NAME", ""), "security")
 
 
@@ -350,15 +350,17 @@ class TestB3EnvVarHandling(unittest.TestCase):
     session / prompt を決定するロジックを単体で検証する。
     """
 
-    def _resolve(self, b3_session_id, b3_user_answer, sessions, invoked_type="executor"):
+    def _resolve(self, b3_session_id, b3_user_answer, sessions, invoked_behavior="executor"):
         """B3 env var がある場合の session / prompt 決定ロジックを再現する。"""
         if b3_session_id:
             session_id = b3_session_id
             is_resume = True
         else:
-            session_id, is_resume = run_agent.resolve_session(sessions, "executor", "")
+            session_id, is_resume = run_agent.resolve_session(
+                sessions, run_agent._SESSION_TYPE, ""
+            )
 
-        prompt = run_agent.select_prompt(is_resume, b3_user_answer, invoked_type)
+        prompt = run_agent.select_prompt(is_resume, b3_user_answer, invoked_behavior)
         return session_id, is_resume, prompt
 
     def test_b3_mode_uses_env_session_id(self):
@@ -385,7 +387,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
         self.assertNotEqual(prompt, "/boid-sandbox")
 
     def test_non_b3_mode_uses_payload_session(self):
-        sessions = [{"type": "executor", "name": "", "id": "payload-id"}]
+        sessions = [{"type": "execution", "name": "", "id": "payload-id"}]
         session_id, is_resume, prompt = self._resolve(
             b3_session_id="",
             b3_user_answer="",
@@ -397,16 +399,16 @@ class TestB3EnvVarHandling(unittest.TestCase):
 
     def test_non_b3_initial_run_generates_new_session(self):
         import uuid as _uuid
-        for invoked_type, expected_prompt in [
+        for invoked_behavior, expected_prompt in [
             ("supervisor", "/boid-supervisor"),
             ("executor", "/boid-executor"),
         ]:
-            with self.subTest(invoked_type=invoked_type):
+            with self.subTest(invoked_behavior=invoked_behavior):
                 session_id, is_resume, prompt = self._resolve(
                     b3_session_id="",
                     b3_user_answer="",
                     sessions=[],
-                    invoked_type=invoked_type,
+                    invoked_behavior=invoked_behavior,
                 )
                 self.assertFalse(is_resume)
                 _uuid.UUID(session_id)  # must be a valid UUID
