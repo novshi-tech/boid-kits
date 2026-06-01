@@ -371,17 +371,12 @@ class TestExtractSessionId(unittest.TestCase):
 
 
 class TestEnvVarDefaults(unittest.TestCase):
-    def test_default_type_is_executor(self):
-        env = {}
-        self.assertEqual(env.get("BOID_INVOKED_TYPE", "executor"), "executor")
-
     def test_default_name_is_empty(self):
         env = {}
         self.assertEqual(env.get("BOID_INVOKED_NAME", ""), "")
 
     def test_explicit_values_used(self):
-        env = {"BOID_INVOKED_TYPE": "verifier", "BOID_INVOKED_NAME": "security"}
-        self.assertEqual(env.get("BOID_INVOKED_TYPE", "executor"), "verifier")
+        env = {"BOID_INVOKED_NAME": "security"}
         self.assertEqual(env.get("BOID_INVOKED_NAME", ""), "security")
 
 

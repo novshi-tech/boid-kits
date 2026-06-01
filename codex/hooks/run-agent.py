@@ -23,6 +23,13 @@ def get_sessions(payload):
     return sessions
 
 
+# Session identity is keyed by a fixed phase tag (one agent session per task),
+# not by behavior. Kept as "execution" for backward compatibility with session
+# entries already persisted in task payloads. Codex ships no per-behavior skill,
+# so skill selection stays on the /boid-sandbox shim regardless.
+_SESSION_TYPE = "execution"
+
+
 def resolve_session(sessions, invoked_type, invoked_name):
     # Codex CLI does not support pre-assigning a session ID; new IDs are
     # extracted from the JSONL stream after the run. Return None for new
@@ -147,7 +154,9 @@ def main():
 
     interactive = os.environ.get("BOID_INTERACTIVE") == "1"
     model = os.environ.get("BOID_MODEL", "")
-    invoked_type = os.environ.get("BOID_INVOKED_TYPE", "executor")
+    # Session identity uses the fixed _SESSION_TYPE; the old BOID_INVOKED_TYPE
+    # (always the instruction phase "execution", never a behavior) is gone.
+    # BOID_INVOKED_BEHAVIOR is unused here since codex has no per-behavior skill.
     invoked_name = os.environ.get("BOID_INVOKED_NAME", "")
 
     if interactive:
@@ -157,7 +166,7 @@ def main():
         payload = read_payload_from_string(sys.stdin.read())
 
     sessions = get_sessions(payload)
-    session_id, is_resume = resolve_session(sessions, invoked_type, invoked_name)
+    session_id, is_resume = resolve_session(sessions, _SESSION_TYPE, invoked_name)
 
     prompt = "/boid-sandbox"
 
@@ -245,7 +254,7 @@ def main():
             )
 
     updated_sessions = update_sessions(
-        sessions, invoked_type, invoked_name, captured_session_id
+        sessions, _SESSION_TYPE, invoked_name, captured_session_id
     )
     write_payload_patch(updated_sessions)
 

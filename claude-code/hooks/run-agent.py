@@ -75,6 +75,12 @@ _SKILL_BY_BEHAVIOR = {
     "executor": "/boid-executor",
 }
 
+# Session identity is keyed by a fixed phase tag (one agent session per task),
+# not by behavior. Kept as "execution" for backward compatibility with session
+# entries already persisted in task payloads. Skill selection is a separate
+# concern, driven by BOID_INVOKED_BEHAVIOR (see select_prompt / main).
+_SESSION_TYPE = "execution"
+
 
 def get_abort_code(task_id):
     """Return lifecycle.abort.code for task_id, or "" on any failure."""
@@ -94,14 +100,14 @@ def get_abort_code(task_id):
     return ""
 
 
-def select_prompt(is_resume, user_answer, invoked_type="executor", abort_code=""):
+def select_prompt(is_resume, user_answer, invoked_behavior="", abort_code=""):
     if user_answer:
         return user_answer
     if is_resume:
         if abort_code == "daemon_restart":
             return _DAEMON_RESTART_RESUME_PROMPT
         return _RESUME_PROMPT
-    return _SKILL_BY_BEHAVIOR.get(invoked_type, "/boid-sandbox")
+    return _SKILL_BY_BEHAVIOR.get(invoked_behavior, "/boid-sandbox")
 
 
 def get_sessions(payload):
@@ -264,7 +270,11 @@ def main():
     ensure_skills_symlinks()
 
     model = os.environ.get("BOID_MODEL", "")
-    invoked_type = os.environ.get("BOID_INVOKED_TYPE", "executor")
+    # BOID_INVOKED_BEHAVIOR (executor / supervisor, canonicalised by boid) selects
+    # the agent skill. It replaced BOID_INVOKED_TYPE, which carried the instruction
+    # phase ("execution") — never a behavior — so it always fell through to the
+    # /boid-sandbox shim instead of /boid-executor or /boid-supervisor.
+    invoked_behavior = os.environ.get("BOID_INVOKED_BEHAVIOR", "")
     invoked_name = os.environ.get("BOID_INVOKED_NAME", "")
     task_id = os.environ.get("BOID_TASK_ID", "")
 
@@ -284,14 +294,14 @@ def main():
     else:
         # Payload-based session management (fallback / non-B3 flow).
         sessions = get_sessions(payload)
-        session_id, is_resume = resolve_session(sessions, invoked_type, invoked_name)
+        session_id, is_resume = resolve_session(sessions, _SESSION_TYPE, invoked_name)
 
     # Persist session id up-front so abnormal termination (SIGKILL, OOM) still
     # leaves a usable resume target for the next hook invocation. The EXIT trap
     # reads payload_patch.json regardless of how we exit.
     if not b3_session_id:
         sessions = get_sessions(payload)
-        updated_sessions = update_sessions(sessions, invoked_type, invoked_name, session_id)
+        updated_sessions = update_sessions(sessions, _SESSION_TYPE, invoked_name, session_id)
         write_payload_patch(updated_sessions)
 
     # Fetch abort code only on resume without a user answer to distinguish
@@ -300,7 +310,7 @@ def main():
     if is_resume and not b3_user_answer:
         abort_code = get_abort_code(task_id)
 
-    prompt = select_prompt(is_resume, b3_user_answer, invoked_type, abort_code)
+    prompt = select_prompt(is_resume, b3_user_answer, invoked_behavior, abort_code)
     args = build_claude_args(
         is_resume=is_resume,
         session_id=session_id,
