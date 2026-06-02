@@ -355,6 +355,33 @@ def main():
     # agent-stop signal silently never lands.
     signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGUSR1})
 
+    def on_winch(_signum, _frame):
+        # Terminal resize forwarding. When a web/CLI client resizes its
+        # terminal, the daemon updates the PTY winsize; the kernel then
+        # delivers SIGWINCH to the PTY's foreground process group — the
+        # bash / pasta / run-agent.py chain, which all share that group.
+        # claude runs in its OWN session (start_new_session=True below), so
+        # the group SIGWINCH never reaches it and it keeps rendering at its
+        # startup width — garbling narrower (e.g. mobile) viewers, since the
+        # live byte stream stays at the original column count. Forward the
+        # signal to claude so it re-reads the (already-updated) PTY winsize
+        # and repaints at the client's width.
+        proc = proc_holder.get("proc")
+        if proc is None:
+            return
+        try:
+            if proc.poll() is None:
+                proc.send_signal(signal.SIGWINCH)
+        except OSError:
+            # Process already gone — nothing to forward to.
+            pass
+
+    signal.signal(signal.SIGWINCH, on_winch)
+    # SIGWINCH's default disposition is "ignore"; register before Popen so no
+    # early resize is dropped. Unblock defensively in case the inherited pasta
+    # sigmask covers it (as it does for SIGUSR1).
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGWINCH})
+
     # Launch claude in its own session so the daemon's SIGUSR1 (delivered to
     # the runtime's process group) does not reach claude. The bash scripts
     # mark SIGUSR1 as SIG_IGN (`trap '' USR1`) which is inherited across
