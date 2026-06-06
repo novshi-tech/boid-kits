@@ -1,0 +1,73 @@
+meta:
+  name: fly.io CLI
+  description: fly.io の CLI (fly / flyctl) を broker 経由でホスト側実行し、サンドボックスに提供する
+  category: tool
+
+detect:
+  script: detect.sh
+
+requires:
+  commands:
+    - fly
+
+host_commands:
+  fly:
+    # 公式インストーラ (https://fly.io/install.sh) の既定配置。
+    # kit ロード時に ${HOME} が daemon の HOME に展開される。
+    # 別の場所へ入れている場合は .boid/project.local.yaml の
+    # host_commands.fly.path で上書きする。
+    path: ${HOME}/.fly/bin/flyctl
+    allow:
+      # --- deploy / lifecycle ---
+      - deploy
+      - launch
+      - apps
+      - app
+      - scale
+      - releases
+      - config
+      - image
+      - move
+      # --- runtime / ops ---
+      - status
+      - logs
+      - machine
+      - machines
+      - volumes
+      - volume
+      - secrets
+      - checks
+      - services
+      - history
+      - info
+      - vm
+      # --- connectivity ---
+      - ssh
+      - sftp
+      - proxy
+      - console
+      - certs
+      - ips
+      - regions
+      - dig
+      - ping
+      - agent
+      - wireguard
+      - wg
+      # --- managed services ---
+      - postgres
+      - pg
+      - mysql
+      - redis
+      # --- inspection ---
+      - platform
+      - orgs
+      - dashboard
+      - dash
+      - open
+      - version
+    env:
+      # boid の secret store に FLY_API_TOKEN があれば注入。
+      # 無ければ env は設定されず、ホストの ~/.fly/config.yml の
+      # ログイン情報にフォールバックする。
+      FLY_API_TOKEN: "secret:"
