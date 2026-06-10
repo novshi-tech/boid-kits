@@ -36,6 +36,8 @@ additional_bindings:
     target: ${HOME}/.claude/skills/boid-supervisor
   - source: ${HOME}/.local/share/boid/skills/boid-executor
     target: ${HOME}/.claude/skills/boid-executor
+  - source: ${HOME}/.local/share/boid/skills/boid-web
+    target: ${HOME}/.claude/skills/boid-web
 hooks:
   - id: run-agent
     name: Claude Code
