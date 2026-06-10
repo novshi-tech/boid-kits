@@ -590,6 +590,18 @@ class TestBuildClaudeArgs(unittest.TestCase):
         )
         self.assertNotIn("--settings", args)
 
+    def test_disables_webfetch(self):
+        # WebFetch はサンドボックス egress allowlist で必ず 403 になるため
+        # ツールごと無効化する (boid: docs/plans/sandbox-web-access.md)。
+        args = run_agent.build_claude_args(
+            is_resume=False,
+            session_id="sess-1",
+            model="",
+            prompt="/boid-executor",
+        )
+        self.assertIn("--disallowedTools", args)
+        self.assertEqual(args[args.index("--disallowedTools") + 1], "WebFetch")
+
 
 if __name__ == "__main__":
     unittest.main()
