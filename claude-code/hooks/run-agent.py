@@ -232,7 +232,16 @@ def build_claude_args(
     with `done_request:` / `failure_report:` prefixes before exiting, and
     parent supervisors detect stuck children via polling.
     """
-    args = ["claude", "--permission-mode", "bypassPermissions"]
+    # WebFetch はサンドボックスの egress allowlist (boid proxy) で必ず 403 に
+    # なるため、ツールごと無効化してエージェントが無駄ターンを踏まないようにする。
+    # web 取得は将来 boid 仲介ツールで提供予定 (boid: docs/plans/sandbox-web-access.md)。
+    args = [
+        "claude",
+        "--permission-mode",
+        "bypassPermissions",
+        "--disallowedTools",
+        "WebFetch",
+    ]
     if is_resume:
         args.extend(["--resume", session_id])
     else:
