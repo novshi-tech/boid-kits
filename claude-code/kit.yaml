@@ -28,16 +28,14 @@ additional_bindings:
     mode: rw
   - source: ${HOME}/.local/share/boid/skills/boid-sandbox
     target: ${HOME}/.claude/skills/boid-sandbox
-  - source: ${HOME}/.local/share/boid/skills/boid-plan
-    target: ${HOME}/.claude/skills/boid-plan
-  - source: ${HOME}/.local/share/boid/skills/boid-discuss
-    target: ${HOME}/.claude/skills/boid-discuss
   - source: ${HOME}/.local/share/boid/skills/boid-supervisor
     target: ${HOME}/.claude/skills/boid-supervisor
   - source: ${HOME}/.local/share/boid/skills/boid-executor
     target: ${HOME}/.claude/skills/boid-executor
   - source: ${HOME}/.local/share/boid/skills/boid-web
     target: ${HOME}/.claude/skills/boid-web
+  - source: ${HOME}/.local/share/boid/skills/boid-task
+    target: ${HOME}/.claude/skills/boid-task
   - source: ${HOME}/.local/share/boid/skills/boid-orchestrate
     target: ${HOME}/.claude/skills/boid-orchestrate
 hooks:
