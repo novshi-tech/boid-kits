@@ -350,8 +350,13 @@ class TestB3EnvVarHandling(unittest.TestCase):
     session / prompt を決定するロジックを単体で検証する。
     """
 
-    def _resolve(self, b3_session_id, b3_user_answer, sessions, invoked_behavior="executor"):
-        """B3 env var がある場合の session / prompt 決定ロジックを再現する。"""
+    def _resolve(self, b3_session_id, b3_user_answer, sessions, invoked_behavior=""):
+        """B3 env var がある場合の session / prompt 決定ロジックを再現する。
+
+        invoked_behavior は free naming era では select_prompt に渡されないが、
+        既存テストの呼び出し互換のため引数は残す (無視される)。
+        """
+        _ = invoked_behavior
         if b3_session_id:
             session_id = b3_session_id
             is_resume = True
@@ -360,7 +365,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
                 sessions, run_agent._SESSION_TYPE, ""
             )
 
-        prompt = run_agent.select_prompt(is_resume, b3_user_answer, invoked_behavior)
+        prompt = run_agent.select_prompt(is_resume, b3_user_answer)
         return session_id, is_resume, prompt
 
     def test_b3_mode_uses_env_session_id(self):
@@ -375,7 +380,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
 
     def test_b3_mode_empty_user_answer_uses_resume_prompt(self):
         # reopen 等、 answer なし resume では state-changed prompt に落ちる。
-        # /boid-sandbox を再投入すると履歴を信じて即終了する症状の対策。
+        # /boid-task を再投入すると履歴を信じて即終了する症状の対策。
         session_id, is_resume, prompt = self._resolve(
             b3_session_id="b3-uuid-1234",
             b3_user_answer="",
@@ -384,7 +389,7 @@ class TestB3EnvVarHandling(unittest.TestCase):
         self.assertEqual(session_id, "b3-uuid-1234")
         self.assertTrue(is_resume)
         self.assertEqual(prompt, run_agent._RESUME_PROMPT)
-        self.assertNotEqual(prompt, "/boid-sandbox")
+        self.assertNotEqual(prompt, "/boid-task")
 
     def test_non_b3_mode_uses_payload_session(self):
         sessions = [{"type": "execution", "name": "", "id": "payload-id"}]
@@ -399,31 +404,25 @@ class TestB3EnvVarHandling(unittest.TestCase):
 
     def test_non_b3_initial_run_generates_new_session(self):
         import uuid as _uuid
-        for invoked_behavior, expected_prompt in [
-            ("supervisor", "/boid-supervisor"),
-            ("executor", "/boid-executor"),
-        ]:
-            with self.subTest(invoked_behavior=invoked_behavior):
-                session_id, is_resume, prompt = self._resolve(
-                    b3_session_id="",
-                    b3_user_answer="",
-                    sessions=[],
-                    invoked_behavior=invoked_behavior,
-                )
-                self.assertFalse(is_resume)
-                _uuid.UUID(session_id)  # must be a valid UUID
-                self.assertEqual(prompt, expected_prompt)
+        # Fresh task-mode start (any behavior, free-naming era) bootstraps via
+        # the unified /boid-task skill. Mode determination happens inside the
+        # skill from environment.yaml `readonly`.
+        session_id, is_resume, prompt = self._resolve(
+            b3_session_id="",
+            b3_user_answer="",
+            sessions=[],
+            invoked_behavior="supervisor",
+        )
+        self.assertFalse(is_resume)
+        _uuid.UUID(session_id)  # must be a valid UUID
+        self.assertEqual(prompt, "/boid-task")
 
 
 class TestSelectPrompt(unittest.TestCase):
-    def test_fresh_supervisor_returns_boid_supervisor(self):
-        self.assertEqual(run_agent.select_prompt(False, "", "supervisor"), "/boid-supervisor")
-
-    def test_fresh_executor_returns_boid_executor(self):
-        self.assertEqual(run_agent.select_prompt(False, "", "executor"), "/boid-executor")
-
-    def test_fresh_unknown_returns_boid_sandbox(self):
-        self.assertEqual(run_agent.select_prompt(False, "", "unknown-behavior"), "/boid-sandbox")
+    def test_fresh_returns_task_skill(self):
+        # Free naming era: invoked_behavior no longer steers skill selection;
+        # every fresh task agent bootstraps via /boid-task.
+        self.assertEqual(run_agent.select_prompt(False, ""), "/boid-task")
 
     def test_resume_without_answer_returns_resume_prompt(self):
         prompt = run_agent.select_prompt(True, "")
@@ -439,23 +438,23 @@ class TestSelectPrompt(unittest.TestCase):
         self.assertEqual(run_agent.select_prompt(False, "ans"), "ans")
 
     def test_resume_daemon_restart_returns_daemon_restart_prompt(self):
-        prompt = run_agent.select_prompt(True, "", "executor", "daemon_restart")
+        prompt = run_agent.select_prompt(True, "", "daemon_restart")
         self.assertEqual(prompt, run_agent._DAEMON_RESTART_RESUME_PROMPT)
         self.assertIn("daemon", prompt)
         self.assertIn("リカバリ", prompt)
 
     def test_resume_other_abort_code_returns_resume_prompt(self):
         # daemon_restart 以外の abort code は通常の resume prompt
-        prompt = run_agent.select_prompt(True, "", "executor", "other_code")
+        prompt = run_agent.select_prompt(True, "", "other_code")
         self.assertEqual(prompt, run_agent._RESUME_PROMPT)
 
     def test_resume_empty_abort_code_returns_resume_prompt(self):
-        prompt = run_agent.select_prompt(True, "", "executor", "")
+        prompt = run_agent.select_prompt(True, "", "")
         self.assertEqual(prompt, run_agent._RESUME_PROMPT)
 
     def test_user_answer_overrides_daemon_restart(self):
         # user_answer があれば daemon_restart abort_code より優先される
-        prompt = run_agent.select_prompt(True, "go ahead", "executor", "daemon_restart")
+        prompt = run_agent.select_prompt(True, "go ahead", "daemon_restart")
         self.assertEqual(prompt, "go ahead")
 
     def test_daemon_restart_prompt_differs_from_resume_prompt(self):
@@ -575,9 +574,9 @@ class TestBuildClaudeArgs(unittest.TestCase):
             is_resume=False,
             session_id="sess-1",
             model="",
-            prompt="/boid-executor",
+            prompt="/boid-task",
         )
-        self.assertEqual(args[-1], "/boid-executor")
+        self.assertEqual(args[-1], "/boid-task")
 
     def test_does_not_inject_settings_flag(self):
         # lifecycle-accountability Phase 2.a: Stop hook は廃止されたので
@@ -586,7 +585,7 @@ class TestBuildClaudeArgs(unittest.TestCase):
             is_resume=False,
             session_id="sess-1",
             model="",
-            prompt="/boid-executor",
+            prompt="/boid-task",
         )
         self.assertNotIn("--settings", args)
 
@@ -597,7 +596,7 @@ class TestBuildClaudeArgs(unittest.TestCase):
             is_resume=False,
             session_id="sess-1",
             model="",
-            prompt="/boid-executor",
+            prompt="/boid-task",
         )
         self.assertIn("--disallowedTools", args)
         self.assertEqual(args[args.index("--disallowedTools") + 1], "WebFetch")

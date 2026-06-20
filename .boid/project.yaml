@@ -15,9 +15,9 @@ task_behaviors:
       agent: claude-code
       model: sonnet
       message: |
-        Follow the /boid-executor skill to implement what task.yaml's
-        title and description describe. When done, run /dev-pr-flow if
-        available; otherwise commit + push and exit.
+        Follow the /boid-task skill (Executor Mode) to implement what
+        task.yaml's title and description describe. When done, run
+        /dev-pr-flow if available; otherwise commit + push and exit.
   supervisor:
     name: Plan
     default_instruction:
@@ -25,8 +25,8 @@ task_behaviors:
       agent: claude-code
       model: opus
       message: |
-        Follow the /boid-supervisor skill to build the implementation
-        plan and create/monitor child executor tasks. Merging each
-        child's PR is the supervisor's own responsibility: once a
-        child finishes, merge its PR into main, pull, and verify the
-        result before launching the next child.
+        Follow the /boid-task skill (Supervisor Mode) to build the
+        implementation plan and create/monitor child executor tasks.
+        Merging each child's PR is the supervisor's own responsibility:
+        once a child finishes, merge its PR into main, pull, and verify
+        the result before launching the next child.
