@@ -4,8 +4,6 @@ name: boid-kits
 worktree: true
 
 kits:
-  - github.com/novshi-tech/boid-kits/claude-code
-  - github.com/novshi-tech/boid-kits/codex
   - github.com/novshi-tech/boid-kits/github-cli
 task_behaviors:
   executor:
