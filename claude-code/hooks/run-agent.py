@@ -39,7 +39,7 @@ _PAUSE_SYSTEM_PROMPT = (
     " `--message \"<コンテキスト>\" --ask \"<質問>\"` を使う。 呼ばずに応答を text"
     " のみで返すと、 claude が PTY で永遠に入力待ちになり task が hang する。"
     " notify 後は boid daemon が自動的にこのセッションを終了する。 詳細は"
-    " `/boid-q-and-a` および `/boid-supervisor` / `/boid-executor` skill 参照。"
+    " `/boid-task` skill 参照。"
 )
 
 # Resume without a user answer (e.g. reopen with a new instruction): the prior
@@ -70,15 +70,15 @@ _DAEMON_RESTART_RESUME_PROMPT = (
     " (idle 離脱は禁止)**。"
 )
 
-_SKILL_BY_BEHAVIOR = {
-    "supervisor": "/boid-supervisor",
-    "executor": "/boid-executor",
-}
+# Single unified bootstrap skill. With task_behaviors free naming (Track A2
+# #574) the daemon no longer guarantees canonical behavior names, so we route
+# every task to /boid-task which determines supervisor vs executor mode from
+# environment.yaml `readonly`.
+_TASK_BOOTSTRAP_SKILL = "/boid-task"
 
 # Session identity is keyed by a fixed phase tag (one agent session per task),
 # not by behavior. Kept as "execution" for backward compatibility with session
-# entries already persisted in task payloads. Skill selection is a separate
-# concern, driven by BOID_INVOKED_BEHAVIOR (see select_prompt / main).
+# entries already persisted in task payloads.
 _SESSION_TYPE = "execution"
 
 
@@ -100,14 +100,14 @@ def get_abort_code(task_id):
     return ""
 
 
-def select_prompt(is_resume, user_answer, invoked_behavior="", abort_code=""):
+def select_prompt(is_resume, user_answer, abort_code=""):
     if user_answer:
         return user_answer
     if is_resume:
         if abort_code == "daemon_restart":
             return _DAEMON_RESTART_RESUME_PROMPT
         return _RESUME_PROMPT
-    return _SKILL_BY_BEHAVIOR.get(invoked_behavior, "/boid-sandbox")
+    return _TASK_BOOTSTRAP_SKILL
 
 
 def get_sessions(payload):
@@ -257,12 +257,14 @@ def ensure_skills_symlinks():
     claude_skills_dir = Path.home() / ".claude" / "skills"
     claude_skills_dir.mkdir(parents=True, exist_ok=True)
 
-    # boid-sandbox fallback: boid daemon deploys this to ~/.local/share/boid/skills/
-    # when it runs; create a symlink here in case additional_bindings didn't apply.
-    boid_sandbox_link = claude_skills_dir / "boid-sandbox"
-    if not boid_sandbox_link.exists() and not boid_sandbox_link.is_symlink():
-        boid_skills_src = Path.home() / ".local" / "share" / "boid" / "skills" / "boid-sandbox"
-        boid_sandbox_link.symlink_to(boid_skills_src)
+    # boid-embedded skills fallback: boid daemon deploys these to
+    # ~/.local/share/boid/skills/ when it runs; create a symlink here in case
+    # additional_bindings didn't apply for any reason.
+    boid_skills_src_base = Path.home() / ".local" / "share" / "boid" / "skills"
+    for skill_name in ("boid-task", "boid-orchestrate", "boid-web"):
+        link = claude_skills_dir / skill_name
+        if not link.exists() and not link.is_symlink():
+            link.symlink_to(boid_skills_src_base / skill_name)
 
     # Kit-provided skills: auto-link every directory under <kit_root>/skills/.
     kit_root = Path(__file__).resolve().parent.parent
@@ -279,11 +281,10 @@ def main():
     ensure_skills_symlinks()
 
     model = os.environ.get("BOID_MODEL", "")
-    # BOID_INVOKED_BEHAVIOR (executor / supervisor, canonicalised by boid) selects
-    # the agent skill. It replaced BOID_INVOKED_TYPE, which carried the instruction
-    # phase ("execution") — never a behavior — so it always fell through to the
-    # /boid-sandbox shim instead of /boid-executor or /boid-supervisor.
-    invoked_behavior = os.environ.get("BOID_INVOKED_BEHAVIOR", "")
+    # BOID_INVOKED_BEHAVIOR (canonicalised by boid) is still exported for any
+    # consumer that wants to log or branch on the behavior name. Skill selection
+    # no longer branches on it — every task agent bootstraps via /boid-task and
+    # determines supervisor/executor mode from environment.yaml `readonly`.
     invoked_name = os.environ.get("BOID_INVOKED_NAME", "")
     task_id = os.environ.get("BOID_TASK_ID", "")
 
@@ -319,7 +320,7 @@ def main():
     if is_resume and not b3_user_answer:
         abort_code = get_abort_code(task_id)
 
-    prompt = select_prompt(is_resume, b3_user_answer, invoked_behavior, abort_code)
+    prompt = select_prompt(is_resume, b3_user_answer, abort_code)
     args = build_claude_args(
         is_resume=is_resume,
         session_id=session_id,

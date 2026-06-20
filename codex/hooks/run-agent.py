@@ -25,8 +25,8 @@ def get_sessions(payload):
 
 # Session identity is keyed by a fixed phase tag (one agent session per task),
 # not by behavior. Kept as "execution" for backward compatibility with session
-# entries already persisted in task payloads. Codex ships no per-behavior skill,
-# so skill selection stays on the /boid-sandbox shim regardless.
+# entries already persisted in task payloads. Skill selection is uniform —
+# every task agent bootstraps via /boid-task regardless of behavior name.
 _SESSION_TYPE = "execution"
 
 
@@ -131,11 +131,13 @@ def read_payload_from_string(data):
 
 
 def ensure_skills_symlink():
-    skills_src = Path.home() / ".local" / "share" / "boid" / "skills" / "boid-sandbox"
-    skills_link = Path.home() / ".codex" / "skills" / "boid-sandbox"
-    if not skills_link.exists() and not skills_link.is_symlink():
-        skills_link.parent.mkdir(parents=True, exist_ok=True)
-        skills_link.symlink_to(skills_src)
+    skills_src_base = Path.home() / ".local" / "share" / "boid" / "skills"
+    skills_link_base = Path.home() / ".codex" / "skills"
+    for skill_name in ("boid-task", "boid-orchestrate", "boid-web"):
+        link = skills_link_base / skill_name
+        if not link.exists() and not link.is_symlink():
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(skills_src_base / skill_name)
 
 
 def extract_session_id(event):
@@ -168,7 +170,7 @@ def main():
     sessions = get_sessions(payload)
     session_id, is_resume = resolve_session(sessions, _SESSION_TYPE, invoked_name)
 
-    prompt = "/boid-sandbox"
+    prompt = "/boid-task"
 
     if interactive:
         # TUI mode. --skip-git-repo-check is not supported on `codex resume`.

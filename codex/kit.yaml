@@ -23,9 +23,11 @@ commands:
 additional_bindings:
   - source: ${HOME}/.codex
     mode: rw
-  - source: ${HOME}/.local/share/boid/skills/boid-sandbox
+  - source: ${HOME}/.local/share/boid/skills/boid-task
     mode: rw
-  - source: ${HOME}/.local/share/boid/skills/boid-discuss
+  - source: ${HOME}/.local/share/boid/skills/boid-orchestrate
+    mode: rw
+  - source: ${HOME}/.local/share/boid/skills/boid-web
     mode: rw
 
 hooks:
